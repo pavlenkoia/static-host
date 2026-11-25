@@ -1,5 +1,15 @@
 # Log
 
+- 2026-11-25T12:32:39Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T12:32:39Z — update: notes/domains-and-security.md
+
+- 2026-11-25T12:32:39Z — update: sources/dynamic-domains.md
+
+- 2026-11-25T12:32:38Z — update: sources/domain-compatibility.md
+
+- 2026-11-25T12:31:51Z — ingest: domain-compatibility (raw/2026-11-25-domain-compatibility.md)
+
 - 2026-11-25T12:24:16Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T12:24:16Z — update: notes/domains-and-security.md
