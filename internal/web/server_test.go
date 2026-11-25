@@ -10,14 +10,12 @@ import (
  "time"
  "testing"
 
- "static-host/internal/auth"
  "static-host/internal/store"
 )
 func testCipher(t *testing.T) cipher.AEAD { t.Helper(); block,err:=aes.NewCipher(make([]byte,32)); if err!=nil {t.Fatal(err)}; c,err:=cipher.NewGCM(block); if err!=nil {t.Fatal(err)}; return c }
 func TestSession(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
- if err=auth.Init(db,"admin","long-password-one"); err!=nil {t.Fatal(err)}
- s,err:=New(db,testCipher(t),"http://127.0.0.1:8080"); if err!=nil {t.Fatal(err)}
+ s,err:=New(db,testCipher(t),"http://127.0.0.1:8080","long-password-one"); if err!=nil {t.Fatal(err)}
  request:=func(method,path,body string,cookie *http.Cookie,csrf,origin string)*httptest.ResponseRecorder { r:=httptest.NewRequest(method,"http://127.0.0.1:8080"+path,bytes.NewBufferString(body)); if body!="" {r.Header.Set("Content-Type","application/json")}; if cookie!=nil {r.AddCookie(cookie)}; r.Header.Set("Origin",origin); r.Header.Set("X-CSRF-Token",csrf); w:=httptest.NewRecorder(); s.ServeHTTP(w,r); return w }
  if w:=request("GET","/api/session","",nil,"",""); w.Code!=401 {t.Fatal(w.Code)}
  w:=request("POST","/api/login",`{"login":"admin","password":"long-password-one"}`,nil,"","http://127.0.0.1:8080"); if w.Code!=200 {t.Fatal(w.Code,w.Body)}
@@ -29,8 +27,7 @@ func TestSession(t *testing.T) {
 
 func TestKeys(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
- if err=auth.Init(db,"admin","long-password-one"); err!=nil {t.Fatal(err)}
- s,err:=New(db,testCipher(t),"http://127.0.0.1:8080"); if err!=nil {t.Fatal(err)}
+ s,err:=New(db,testCipher(t),"http://127.0.0.1:8080","long-password-one"); if err!=nil {t.Fatal(err)}
  _,err=db.Exec("INSERT INTO sessions VALUES(?,1,?,?,?)",digest("session"),"csrf",0,s.Now().Unix()+1000); if err!=nil {t.Fatal(err)}
  req:=func(method,path,body string)*httptest.ResponseRecorder {r:=httptest.NewRequest(method,"http://127.0.0.1:8080"+path,bytes.NewBufferString(body)); r.AddCookie(&http.Cookie{Name:"static_host_session",Value:"session"}); r.Header.Set("Origin","http://127.0.0.1:8080"); r.Header.Set("X-CSRF-Token","csrf"); if body!="" {r.Header.Set("Content-Type","application/json")}; w:=httptest.NewRecorder(); s.ServeHTTP(w,r); return w}
  w:=req("POST","/api/keys",`{"name":"agent","expires_in_days":90}`); if w.Code!=201 {t.Fatal(w.Code,w.Body)}
@@ -57,15 +54,14 @@ func TestKeys(t *testing.T) {
  for _,tc:=range []struct{cookie bool; csrf,origin string; want int}{{false,"csrf","http://127.0.0.1:8080",401},{true,"bad","http://127.0.0.1:8080",403},{true,"csrf","http://invalid",403}} {
   r:=httptest.NewRequest("POST","http://127.0.0.1:8080/api/keys/"+persisted.Key.ID+"/reveal",nil); if tc.cookie {r.AddCookie(&http.Cookie{Name:"static_host_session",Value:"session"})}; r.Header.Set("Origin",tc.origin); r.Header.Set("X-CSRF-Token",tc.csrf); rec:=httptest.NewRecorder(); s.ServeHTTP(rec,r); if rec.Code!=tc.want || bytes.Contains(rec.Body.Bytes(),[]byte(persisted.Token)) {t.Fatal(rec.Code,tc.want)}
  }
- s,err=New(db,testCipher(t),"http://127.0.0.1:8080"); if err!=nil {t.Fatal(err)}; if w=req("POST","/api/keys/"+persisted.Key.ID+"/reveal",""); w.Code!=200 || !bytes.Contains(w.Body.Bytes(),[]byte(persisted.Token)) {t.Fatal(w.Code)}
+ s,err=New(db,testCipher(t),"http://127.0.0.1:8080","long-password-one"); if err!=nil {t.Fatal(err)}; if w=req("POST","/api/keys/"+persisted.Key.ID+"/reveal",""); w.Code!=200 || !bytes.Contains(w.Body.Bytes(),[]byte(persisted.Token)) {t.Fatal(w.Code)}
  if _,err=db.Exec("UPDATE agent_keys SET token_ciphertext=x'01' WHERE id=?",persisted.Key.ID); err!=nil {t.Fatal(err)}; if w=req("POST","/api/keys/"+persisted.Key.ID+"/reveal",""); w.Code!=503 {t.Fatal(w.Code)}
  if w=req("POST","/api/keys/"+unlimited.Key.ID+"/reveal",""); w.Code!=404 {t.Fatal(w.Code)}
 }
 
 func TestLoginRateLimit(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
- if err=auth.Init(db,"admin","long-password-one"); err!=nil {t.Fatal(err)}
- s,err:=New(db,testCipher(t),"http://127.0.0.1:8080"); if err!=nil {t.Fatal(err)}
+ s,err:=New(db,testCipher(t),"http://127.0.0.1:8080","long-password-one"); if err!=nil {t.Fatal(err)}
  now:=time.Unix(100000,0); s.Now=func() time.Time{return now}
  attempt:=func() *httptest.ResponseRecorder {r:=httptest.NewRequest("POST","http://127.0.0.1:8080/api/login",bytes.NewBufferString(`{"login":"unknown","password":"wrong"}`)); r.Header.Set("Origin","http://127.0.0.1:8080"); r.Header.Set("Content-Type","application/json"); w:=httptest.NewRecorder(); s.ServeHTTP(w,r); return w}
  for range 5 { if w:=attempt(); w.Code!=401 {t.Fatal(w.Code)} }
@@ -75,7 +71,7 @@ func TestLoginRateLimit(t *testing.T) {
 
 func TestConfiguredOrigin(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
- s,err:=New(db,testCipher(t),"http://127.0.0.1:23456"); if err!=nil {t.Fatal(err)}
+ s,err:=New(db,testCipher(t),"http://127.0.0.1:23456","long-password-one"); if err!=nil {t.Fatal(err)}
  for _,tc:=range []struct{origin string; want int}{{"http://127.0.0.1:23456",401},{"http://127.0.0.1:8080",403},{"http://127.0.0.1:5173",403},{"",403}} {
   r:=httptest.NewRequest("POST","http://127.0.0.1:23456/api/keys/id/reveal",nil);r.Header.Set("Origin",tc.origin);w:=httptest.NewRecorder();s.ServeHTTP(w,r);if w.Code!=tc.want {t.Fatalf("origin=%s: %d, want %d",tc.origin,w.Code,tc.want)}
  }
@@ -87,10 +83,7 @@ func TestSessionExpirationBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if err := auth.Init(db, "admin", "long-password-one"); err != nil {
-		t.Fatal(err)
-	}
-	s, err := New(db, testCipher(t), "http://127.0.0.1:8080")
+	s, err := New(db, testCipher(t), "http://127.0.0.1:8080", "long-password-one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,4 +128,22 @@ func TestSessionExpirationBoundary(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("expired session mutation persisted, got %d keys", count)
 	}
+}
+
+func TestPasswordRotationDoesNotPersistCredentials(t *testing.T) {
+ db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
+ oldServer,err:=New(db,testCipher(t),"http://127.0.0.1:8080","old-admin-password")
+ if err!=nil {t.Fatal(err)}
+ request:=func(s *Server,password string)*httptest.ResponseRecorder { body:=`{"login":"admin","password":"`+password+`"}`;r:=httptest.NewRequest("POST","http://127.0.0.1:8080/api/login",bytes.NewBufferString(body));r.Header.Set("Content-Type","application/json");r.Header.Set("Origin","http://127.0.0.1:8080");w:=httptest.NewRecorder();s.ServeHTTP(w,r);return w }
+ if w:=request(oldServer,"old-admin-password");w.Code!=200 {t.Fatal(w.Code,w.Body)}
+ _,err=db.Exec("INSERT INTO agent_keys(id,owner_id,name,token_hash,created_at,expires_at,token_ciphertext) VALUES('preserved',1,'agent',x'0102',1,NULL,x'0304')")
+ if err!=nil {t.Fatal(err)}
+ rotated,err:=New(db,testCipher(t),"http://127.0.0.1:8080","new-admin-password")
+ if err!=nil {t.Fatal(err)}
+ if w:=request(rotated,"old-admin-password");w.Code!=401 {t.Fatalf("old password accepted: %d",w.Code)}
+ if w:=request(rotated,"new-admin-password");w.Code!=200 {t.Fatalf("new password rejected: %d",w.Code)}
+ var id string;var tokenHash,ciphertext []byte
+ if err=db.QueryRow("SELECT id,token_hash,token_ciphertext FROM agent_keys WHERE id='preserved'").Scan(&id,&tokenHash,&ciphertext);err!=nil||id!="preserved"||!bytes.Equal(tokenHash,[]byte{1,2})||!bytes.Equal(ciphertext,[]byte{3,4}) {t.Fatalf("key data changed: %s %x %x %v",id,tokenHash,ciphertext,err)}
+ if _,err=db.Exec("SELECT login FROM users");err==nil {t.Fatal("login credential persisted in database")}
+ if _,err=db.Exec("SELECT password_hash FROM users");err==nil {t.Fatal("password hash persisted in database")}
 }

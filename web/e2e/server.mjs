@@ -32,20 +32,11 @@ export async function startTestServer() {
   const directory = await mkdtemp(join(tmpdir(), 'static-host-e2e-'))
   const binary = join(directory, process.platform === 'win32' ? 'static-host.exe' : 'static-host')
   const port = await freePort()
-  const env = { ...process.env }
+  const env = { ...process.env, STATIC_HOST_ADMIN_PASSWORD: 'e2e-test-password' }
   for (const key of ['STATIC_HOST_LISTEN', 'STATIC_HOST_DATA_DIR', 'STATIC_HOST_BASE_DOMAIN']) delete env[key]
   let child
   try {
     await run('go', ['build', '-o', binary, './cmd/static-host'], { cwd: root })
-    await new Promise((resolve, reject) => {
-      const init = spawn(binary, ['owner', 'init', '--data-dir', directory, '--login', 'e2e-owner'], { cwd: root, env, stdio: ['pipe', 'pipe', 'pipe'] })
-      let output = ''
-      init.stdout.on('data', chunk => { output += chunk })
-      init.stderr.on('data', chunk => { output += chunk })
-      init.once('error', reject)
-      init.once('exit', code => code === 0 ? resolve(output) : reject(new Error(`owner init failed (${code}): ${output}`)))
-      init.stdin.end('e2e-test-password\n')
-    })
     child = spawn(binary, ['--data-dir', directory, '--listen', `127.0.0.1:${port}`], { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'] })
     let stderr = ''
     child.stderr.on('data', chunk => { stderr += chunk })

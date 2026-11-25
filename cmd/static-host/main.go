@@ -20,21 +20,15 @@ import (
 
 func run() error {
 	args := os.Args[1:]
-	if len(args) > 0 && args[0] == "owner" {
-		return owner(args[1:])
-	}
 	cfg, err := config.Parse(args, os.LookupEnv)
 	if err != nil { return err }
 	db, err := store.Open(cfg.DataDir)
 	if err != nil { return err }
 	defer db.Close()
-	var count int
-	if err := db.QueryRow("SELECT count(*) FROM users").Scan(&count); err != nil { return err }
-	if count == 0 { return errors.New("owner not initialized; run owner init") }
-	if _, err := db.Exec("DELETE FROM sessions WHERE expires_at <= ?", time.Now().Unix()); err != nil { return err }
+	if _, err := db.Exec("DELETE FROM sessions"); err != nil { return err }
 	keyCipher, err := auth.LoadKeyCipher(cfg.DataDir, db)
 	if err != nil { return err }
-	app, err := web.New(db, keyCipher, cfg.PanelOrigin)
+	app, err := web.New(db, keyCipher, cfg.PanelOrigin, cfg.AdminPassword)
 	if err != nil { return err }
 	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, app, mcpserver.New(db, cfg.MCPOrigin))
 
@@ -70,20 +64,6 @@ func run() error {
 	}
 }
 
-func owner(args []string) error {
-	command, dir, login, err := config.ParseOwner(args, os.LookupEnv)
-	if err != nil { return err }
-	if command == "init" { if _, err := auth.Login(login); err != nil { return err } }
-	password, err := auth.ReadPassword(os.Stdin)
-	if err != nil { return err }
-	db, err := store.Open(dir)
-	if err != nil { return err }
-	defer db.Close()
-	if command == "init" { err = auth.Init(db, login, password) } else { err = auth.Reset(db, password) }
-	if err != nil { return err }
-	fmt.Println("Owner credentials updated")
-	return nil
-}
 
 func main() {
 	if err := run(); err != nil {

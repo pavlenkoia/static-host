@@ -24,8 +24,8 @@ import (
 //go:embed dist
 var assets embed.FS
 
-type Server struct { DB *sql.DB; KeyCipher cipher.AEAD; Origin string; cookieName string; secureCookie bool; Now func() time.Time; mu sync.Mutex; failures []time.Time; dummy string }
-func New(db *sql.DB, keyCipher cipher.AEAD, origin string) (*Server,error) { if keyCipher==nil { return nil,errors.New("nil key cipher") }; if origin=="" {return nil,errors.New("empty origin")}; secure:=strings.HasPrefix(origin,"https://"); name:="static_host_session"; if secure {name="__Host-static_host_session"}; hash, err := auth.Hash("unusable-dummy-password"); if err != nil { return nil,err }; return &Server{DB:db,KeyCipher:keyCipher,Origin:origin,cookieName:name,secureCookie:secure,Now:time.Now,dummy:hash},nil }
+type Server struct { DB *sql.DB; KeyCipher cipher.AEAD; Origin string; cookieName string; secureCookie bool; Now func() time.Time; mu sync.Mutex; failures []time.Time; passwordHash string }
+func New(db *sql.DB, keyCipher cipher.AEAD, origin, password string) (*Server,error) { if keyCipher==nil { return nil,errors.New("nil key cipher") }; if origin=="" {return nil,errors.New("empty origin")}; if !auth.ValidPassword(password) { return nil, errors.New("STATIC_HOST_ADMIN_PASSWORD must be 12–72 bytes") }; hash,err:=auth.Hash(password); if err!=nil {return nil,err}; secure:=strings.HasPrefix(origin,"https://"); name:="static_host_session"; if secure {name="__Host-static_host_session"}; return &Server{DB:db,KeyCipher:keyCipher,Origin:origin,cookieName:name,secureCookie:secure,Now:time.Now,passwordHash:hash},nil }
 func fmtSeconds(d time.Duration) string { return strconv.FormatInt(int64((d+time.Second-1)/time.Second),10) }
 func random(n int) (string,error) { b:=make([]byte,n); if _,err:=rand.Read(b); err!=nil{return "",err}; return base64.RawURLEncoding.EncodeToString(b),nil }
 func digest(s string) []byte { h:=sha256.Sum256([]byte(s)); return h[:] }
@@ -42,7 +42,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter,r *http.Request) {
  http.NotFound(w,r)
 }
 type session struct { Login string `json:"login"`; CSRF string `json:"csrf_token"` }
-func (s *Server) session(r *http.Request) (session,error) { var result session; c,err:=r.Cookie(s.cookieName); if err!=nil { return result,sql.ErrNoRows }; err=s.DB.QueryRow(`SELECT users.login,sessions.csrf_token FROM sessions JOIN users ON users.id=sessions.owner_id WHERE sessions.token_hash=? AND sessions.expires_at>?`,digest(c.Value),s.Now().Unix()).Scan(&result.Login,&result.CSRF); return result,err }
+func (s *Server) session(r *http.Request) (session,error) { var result session; c,err:=r.Cookie(s.cookieName); if err!=nil { return result,sql.ErrNoRows }; err=s.DB.QueryRow(`SELECT csrf_token FROM sessions WHERE token_hash=? AND expires_at>?`,digest(c.Value),s.Now().Unix()).Scan(&result.CSRF); result.Login=auth.AdminLogin; return result,err }
 func (s *Server) require(w http.ResponseWriter,r *http.Request, mutation bool) (session,bool) { v,err:=s.session(r); if errors.Is(err,sql.ErrNoRows) { jsonError(w,401,"unauthorized"); return v,false }; if err!=nil { jsonError(w,503,"service_unavailable"); return v,false }; if mutation && subtle.ConstantTimeCompare([]byte(v.CSRF),[]byte(r.Header.Get("X-CSRF-Token")))!=1 { jsonError(w,403,"forbidden"); return v,false }; return v,true }
 func (s *Server) api(w http.ResponseWriter,r *http.Request) {
  switch r.URL.Path {
@@ -55,6 +55,11 @@ func (s *Server) api(w http.ResponseWriter,r *http.Request) {
 func (s *Server) login(w http.ResponseWriter,r *http.Request) {
  var input struct { Login *string `json:"login"`; Password *string `json:"password"` }; if !decode(w,r,&input) { return }; if input.Login==nil || input.Password==nil {jsonError(w,400,"invalid_request"); return}
  s.mu.Lock(); defer s.mu.Unlock(); now:=s.Now(); cutoff:=now.Add(-5*time.Minute); for len(s.failures)>0 && !s.failures[0].After(cutoff) { s.failures=s.failures[1:] }; if len(s.failures)>=5 { w.Header().Set("Retry-After",fmtSeconds(s.failures[0].Add(5*time.Minute).Sub(now))); jsonError(w,429,"rate_limited"); return }
- var login,hash string; err:=s.DB.QueryRow("SELECT login,password_hash FROM users WHERE login=?",*input.Login).Scan(&login,&hash); if err!=nil && !errors.Is(err,sql.ErrNoRows) { jsonError(w,503,"service_unavailable"); return }; if err!=nil { hash=s.dummy }; valid:=auth.Compare(hash,*input.Password); if err!=nil || !valid { s.failures=append(s.failures,now); jsonError(w,401,"invalid_credentials"); return }
- token,err:=random(32); if err!=nil { jsonError(w,503,"service_unavailable"); return }; csrf,err:=random(32); if err!=nil { jsonError(w,503,"service_unavailable"); return }; _,err=s.DB.Exec("DELETE FROM sessions WHERE expires_at<=?",now.Unix()); if err==nil { _,err=s.DB.Exec("INSERT INTO sessions VALUES(?,1,?,?,?)",digest(token),csrf,now.Unix(),now.Add(12*time.Hour).Unix()) }; if err!=nil { jsonError(w,503,"service_unavailable"); return }; s.failures=nil; http.SetCookie(w,&http.Cookie{Name:s.cookieName,Value:token,Path:"/",Secure:s.secureCookie,HttpOnly:true,SameSite:http.SameSiteStrictMode,MaxAge:43200}); jsonReply(w,200,session{login,csrf})
+ comparisonPassword:=*input.Password
+ passwordTooLong:=len(comparisonPassword)>72
+ if passwordTooLong { comparisonPassword="constant-time-invalid-password" }
+ validPassword:=auth.Compare(s.passwordHash,comparisonPassword) && !passwordTooLong
+ validLogin:=subtle.ConstantTimeCompare(digest(*input.Login),digest(auth.AdminLogin))==1
+ if !validLogin || !validPassword { s.failures=append(s.failures,now); jsonError(w,401,"invalid_credentials"); return }
+ token,err:=random(32); if err!=nil { jsonError(w,503,"service_unavailable"); return }; csrf,err:=random(32); if err!=nil { jsonError(w,503,"service_unavailable"); return }; _,err=s.DB.Exec("DELETE FROM sessions WHERE expires_at<=?",now.Unix()); if err==nil { _,err=s.DB.Exec("INSERT INTO sessions VALUES(?,1,?,?,?)",digest(token),csrf,now.Unix(),now.Add(12*time.Hour).Unix()) }; if err!=nil { jsonError(w,503,"service_unavailable"); return }; s.failures=nil; http.SetCookie(w,&http.Cookie{Name:s.cookieName,Value:token,Path:"/",Secure:s.secureCookie,HttpOnly:true,SameSite:http.SameSiteStrictMode,MaxAge:43200}); jsonReply(w,200,session{auth.AdminLogin,csrf})
 }

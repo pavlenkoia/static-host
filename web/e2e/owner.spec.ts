@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test'
 
 test.use({ baseURL: process.env.E2E_BASE_URL })
 
-const owner = 'e2e-owner'
+const owner = 'admin'
 const password = 'e2e-test-password'
 
 async function login(page: Page) {

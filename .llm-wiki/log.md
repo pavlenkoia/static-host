@@ -1,5 +1,13 @@
 # Log
 
+- 2026-11-25T14:25:00Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T14:24:59Z — update: sources/local-owner-mcp.md
+
+- 2026-11-25T14:24:59Z — update: sources/env-admin.md
+
+- 2026-11-25T14:24:35Z — ingest: env-admin (raw/static-host-env-admin.md)
+
 - 2026-11-25T14:15:41Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T14:15:40Z — update: sources/pr-only-checks.md
