@@ -1,5 +1,7 @@
 # Log
 
+- 2026-11-25T08:17:35Z — update: notes/infrastructure-and-workflow.md
+
 - 2026-11-25T07:39:19Z — Обновлена навигация после исправления подключения OKF
 
 - 2026-11-25T07:39:19Z — update: notes/infrastructure-and-workflow.md
