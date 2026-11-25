@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T14:45:42Z — update: sources/env-admin.md
+
+- 2026-11-25T14:45:42Z — update: sources/make-dev.md
+
+- 2026-11-25T14:45:24Z — ingest: make-dev (raw/static-host-make-dev.md)
+
 - 2026-11-25T14:25:00Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T14:24:59Z — update: sources/local-owner-mcp.md
