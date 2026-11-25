@@ -1,5 +1,13 @@
 # Log
 
+- 2026-11-25T09:06:57Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T09:06:57Z — update: notes/product-and-publication.md
+
+- 2026-11-25T09:06:57Z — update: sources/local-owner-mcp.md
+
+- 2026-11-25T09:06:11Z — ingest: local-owner-mcp (raw/README.md)
+
 - 2026-11-25T08:17:35Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T07:39:19Z — Обновлена навигация после исправления подключения OKF
