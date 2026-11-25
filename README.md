@@ -39,7 +39,7 @@ curl --noproxy '*' http://127.0.0.1:8081/healthz
 
 Образ собирается для `linux/amd64`: `docker build -t static-host:smoke .`, затем `bash scripts/container-smoke.sh static-host:smoke`. Smoke использует временные Docker volumes и не затрагивает `./data`. Образ работает от UID/GID 10001, хранит данные в `/data` и слушает `0.0.0.0:8081`; для запуска сервера требуется `STATIC_HOST_BASE_DOMAIN`. Listener можно переопределить через `STATIC_HOST_LISTEN`.
 
-`compose.yaml` предназначен для одного экземпляра на выбранной ноде Uncloud. Укажите `STATIC_HOST_BASE_DOMAIN` и `STATIC_HOST_MACHINE`; образ и каталог данных `/var/lib/static-host` заданы в Compose. Caddy получает только маршруты `panel.<домен>` и `mcp.<домен>`; DNS, TLS и глобальная конфигурация Caddy здесь не меняются. Обновление stop-first допускает простой; не запускайте две копии с одной SQLite.
+`compose.yaml` предназначен для одного экземпляра на выбранной ноде Uncloud. Скопируйте `.env.examples` в `.env` и укажите свои `STATIC_HOST_BASE_DOMAIN` и `STATIC_HOST_MACHINE`; образ и каталог данных `/var/lib/static-host` заданы в Compose. Caddy получает только маршруты `panel.<домен>` и `mcp.<домен>`; DNS, TLS и глобальная конфигурация Caddy здесь не меняются. Обновление stop-first допускает простой; не запускайте две копии с одной SQLite.
 
 На выбранной ноде заранее создайте **новый** каталог данных с владельцем `10001:10001` и правами `0700`: `sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/static-host`. Не применяйте эту команду к существующему произвольному каталогу. Только для новой базы инициализируйте владельца:
 
