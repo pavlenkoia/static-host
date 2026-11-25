@@ -1,5 +1,13 @@
 # Log
 
+- 2026-11-25T12:24:16Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T12:24:16Z — update: notes/domains-and-security.md
+
+- 2026-11-25T12:24:16Z — update: sources/dynamic-domains.md
+
+- 2026-11-25T12:23:33Z — ingest: dynamic-domains (raw/2026-11-25-dynamic-domains.md)
+
 - 2026-11-25T11:36:46Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T11:36:46Z — update: sources/development-checks.md
