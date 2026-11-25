@@ -29,7 +29,7 @@ func initialize(db *sql.DB) error {
  tx, err := db.BeginTx(context.Background(), nil); if err != nil { _, _ = db.Exec("PRAGMA foreign_keys=ON"); return err }; defer tx.Rollback()
  var version int
  if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil { return err }
- if version > 4 { return fmt.Errorf("unsupported database schema version %d", version) }
+ if version > 5 { return fmt.Errorf("unsupported database schema version %d", version) }
  if version == 0 {
   _, err = tx.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
 CREATE TABLE agent_keys(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER);
@@ -66,6 +66,12 @@ PRAGMA user_version=3;`)
 CREATE TABLE uploads(id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), owner_id INTEGER NOT NULL REFERENCES users(id), key_id TEXT NOT NULL, format TEXT NOT NULL, expected_generation INTEGER NOT NULL, token_hash BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','receiving','ready','failed','expired','published')), expires_at INTEGER NOT NULL, dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, error_code TEXT);
 CREATE TABLE publish_requests(owner_id INTEGER NOT NULL REFERENCES users(id), idempotency_key TEXT NOT NULL, site_id TEXT NOT NULL REFERENCES sites(id), upload_id TEXT NOT NULL, expected_generation INTEGER NOT NULL, result_json TEXT NOT NULL, PRIMARY KEY(owner_id,idempotency_key));
 PRAGMA user_version=4;`)
+  if err != nil { return err }
+ }
+ if version <= 4 {
+  _, err = tx.Exec(`ALTER TABLE sites ADD COLUMN slug TEXT;
+CREATE UNIQUE INDEX sites_slug ON sites(slug);
+PRAGMA user_version=5;`)
   if err != nil { return err }
  }
  if err = tx.Commit(); err != nil { return err }

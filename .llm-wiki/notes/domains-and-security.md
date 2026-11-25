@@ -4,12 +4,12 @@ title: Домены и безопасность
 description: uc.afbmarket.ru, свои домены без TXT и принятый риск IP-проверки.
 sources: [raw/2026-11-25-domains.md]
 tags: [dns, domains, tls, security]
-timestamp: 2026-11-25T19:43:46Z
+timestamp: 2026-11-25T20:05:47Z
 ---
 
 # Домены и безопасность
 
-Базовый домен задаётся установкой; в текущей установке — `uc.afbmarket.ru`. Панель, MCP и upload используют отдельные hostname; системные сайты доступны по `https://<site-id>.sites.uc.afbmarket.ru`. [Публичный wildcard ingress](/sources/wildcard-ingress.md) настроен и проверен сквозной публикацией: wildcard DNS на edge-1, сертификат Let's Encrypt через Cloudflare DNS challenge, маршрут на приложение. Site-id генерируется сервером и не переиспользуется. Собственные домены пока не реализованы.
+Базовый домен задаётся установкой; в текущей установке — `uc.afbmarket.ru`. Панель, MCP и upload используют отдельные hostname. [Короткие адреса](/sources/short-hostnames-capability-upload.md) имеют вид `https://<slug>.sites.uc.afbmarket.ru`: slug постоянно хранится отдельно от ID и формируется из имени сайта; совпадения получают числовой суффикс, удалённые имена не переиспользуются. При запуске существующим сайтам назначается slug; прежние ID-hostname остаются рабочими. Изменение подготовлено локально, production не обновлялся. [Публичный wildcard ingress](/sources/wildcard-ingress.md) настроен и проверен сквозной публикацией. Собственные домены пока не реализованы.
 
 Свои домены подключаются без отдельной TXT-проверки. Основной путь: CNAME на системный адрес конкретного сайта. Сервис проверяет соответствие выбранному сайту, уникальность hostname, направление трафика и готовность HTTPS.
 
@@ -51,3 +51,7 @@ Lifecycle: pending_dns → provisioning_tls → active; active требует п
 - time: 2026-11-25T19:43:46Z
   kind: evidence
   summary: "Системные сайты доступны через production wildcard ingress"
+
+- time: 2026-11-25T20:05:47Z
+  kind: decision
+  summary: "Публичный slug отделён от ID с сохранением старых адресов"

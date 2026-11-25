@@ -10,3 +10,11 @@ func TestLocalLANOrigin(t *testing.T) {
   r:=httptest.NewRequest("GET","http://internal/",nil); r.Host=tc.host; w:=httptest.NewRecorder(); h.ServeHTTP(w,r); if w.Code!=tc.want {t.Errorf("Host %s: got %d want %d",tc.host,w.Code,tc.want)}
  }
 }
+
+func TestShortSiteRouting(t *testing.T) {
+ sites:=http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){w.WriteHeader(204)})
+ h:=New("https://panel.example.test","https://mcp.example.test","https://upload.example.test","sites.example.test",http.NotFoundHandler(),http.NotFoundHandler(),http.NotFoundHandler(),sites)
+ for _,tc:=range []struct{host string; want int}{{"glina-i-svet.sites.example.test",204},{"glina-i-svet.sites.example.test:8443",403},{"nested.glina.sites.example.test",403},{"-glina.sites.example.test",403},{"glina_.sites.example.test",403}} {
+  r:=httptest.NewRequest("GET","https://internal/",nil); r.Host=tc.host; w:=httptest.NewRecorder(); h.ServeHTTP(w,r); if w.Code!=tc.want {t.Errorf("%s: got %d want %d",tc.host,w.Code,tc.want)}
+ }
+}

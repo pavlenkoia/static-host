@@ -1,5 +1,13 @@
 # Log
 
+- 2026-11-25T20:05:47Z — update: notes/product-and-publication.md
+
+- 2026-11-25T20:05:47Z — update: notes/domains-and-security.md
+
+- 2026-11-25T20:05:47Z — update: sources/short-hostnames-capability-upload.md
+
+- 2026-11-25T20:05:09Z — ingest: short-hostnames-capability-upload (raw/architecture.md)
+
 - 2026-11-25T19:43:46Z — update: notes/domains-and-security.md
 
 - 2026-11-25T19:43:45Z — update: sources/wildcard-ingress.md

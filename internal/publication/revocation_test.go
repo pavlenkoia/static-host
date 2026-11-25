@@ -22,6 +22,6 @@ func TestUploadRejectsRevokedKeyDuringBody(t *testing.T) {
  site,err:=s.Create(context.Background(),1,"site"); if err!=nil {t.Fatal(err)}; grant,err:=s.CreateUpload(context.Background(),id,site.ID,"zip",0); if err!=nil {t.Fatal(err)}
  var archive bytes.Buffer; w:=zip.NewWriter(&archive); f,err:=w.Create("index.html"); if err!=nil {t.Fatal(err)}; if _,err=f.Write([]byte("content")); err!=nil {t.Fatal(err)}; if err=w.Close(); err!=nil {t.Fatal(err)}
  body:=&revokeReader{reader:bytes.NewReader(archive.Bytes()),revoke:func(){if _,e:=db.Exec("UPDATE agent_keys SET revoked_at=? WHERE id='key'",time.Now().Unix()); e!=nil {t.Fatal(e)}}}
- req:=httptest.NewRequest(http.MethodPut,grant.UploadURL,body); req.Header.Set("Authorization","Bearer test"); req.Header.Set("Content-Type","application/zip"); res:=httptest.NewRecorder(); s.UploadHandler(func(string)(Identity,error){return id,nil}).ServeHTTP(res,req); if res.Code!=401 {t.Fatalf("revoked upload: %d %s",res.Code,res.Body.String())}
+ req:=httptest.NewRequest(http.MethodPut,grant.UploadURL,body); req.Header.Set("Content-Type","application/zip"); res:=httptest.NewRecorder(); s.UploadHandler().ServeHTTP(res,req); if res.Code!=401 {t.Fatalf("revoked upload: %d %s",res.Code,res.Body.String())}
  got,err:=s.Get(context.Background(),1,site.ID); if err!=nil || got.Status!="draft" || got.Upload==nil || got.Upload.State!="failed" {t.Fatalf("site after revocation: %+v %v",got,err)}
 }

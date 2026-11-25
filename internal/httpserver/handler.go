@@ -22,7 +22,7 @@ func New(panelOrigin,mcpOrigin,uploadOrigin,siteSuffix string,panel,mcp,upload,s
   host:=r.Host; if strings.ContainsAny(host,"/@, \t\r\n") {http.Error(w,"Forbidden",403); return}
   if h,_,err:=net.SplitHostPort(host); err==nil {host=h}
   name:=strings.ToLower(host); tail:="."+strings.ToLower(suffix)
-  if strings.HasSuffix(name,tail) {id:=strings.TrimSuffix(name,tail); valid:=len(id)==34 && strings.HasPrefix(id,"s-"); if valid {for _,c:=range id[2:] {if !(c>='0'&&c<='9'||c>='a'&&c<='f') {valid=false; break}}}; if valid {scheme:="https://"; if local {scheme="http://"}; expected,_:=url.Parse(scheme+id+"."+siteSuffix); if matches(r.Host,expected) {sites.ServeHTTP(w,r); return}}}
+  if strings.HasSuffix(name,tail) {label:=strings.TrimSuffix(name,tail); valid:=len(label)>0 && len(label)<=63 && label[0]!='-' && label[len(label)-1]!='-'; if valid {for _,c:=range label {if !(c>='0'&&c<='9'||c>='a'&&c<='z'||c=='-') {valid=false; break}}}; if valid {scheme:="https://"; if local {scheme="http://"}; expected,_:=url.Parse(scheme+label+"."+siteSuffix); if matches(r.Host,expected) {sites.ServeHTTP(w,r); return}}}
   if r.URL.Path=="/healthz" {w.Header().Set("Content-Type","text/plain; charset=utf-8"); if r.Method=="GET" {_,_=w.Write([]byte("ok\n"))} else if r.Method!="HEAD" {w.Header().Set("Allow","GET, HEAD"); w.WriteHeader(http.StatusMethodNotAllowed)}; return}
   mp:=matches(r.Host,m); pp:=matches(r.Host,p); up:=matches(r.Host,u)
   if up && strings.HasPrefix(r.URL.Path,"/uploads/") {upload.ServeHTTP(w,r); return}

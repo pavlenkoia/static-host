@@ -15,7 +15,7 @@ func TestSiteMetadata(t *testing.T) {
  dir:=t.TempDir(); db,err:=store.Open(dir); if err!=nil {t.Fatal(err)}; defer db.Close()
  s,err:=New(db,dir,Options{SiteSuffix:"localhost:8081",Local:true}); if err!=nil {t.Fatal(err)}; defer s.Close()
  ctx:=context.Background(); site,err:=s.Create(ctx,1,"  Example  "); if err!=nil {t.Fatal(err)}
- if site.Name!="Example" || site.Generation!=0 || site.Status!="draft" || site.URL!="http://"+site.ID+".localhost:8081" {t.Fatalf("unexpected site: %+v",site)}
+ if site.Name!="Example" || site.Generation!=0 || site.Status!="draft" || site.URL!="http://example.localhost:8081" {t.Fatalf("unexpected site: %+v",site)}
  got,err:=s.Get(ctx,1,site.ID); if err!=nil || got!=site {t.Fatalf("get: %+v %v",got,err)}
  _,err=s.Get(ctx,2,site.ID); var e *Error; if !errors.As(err,&e) || e.Code!="site_not_found" {t.Fatalf("foreign site: %v",err)}
  sites,err:=s.List(ctx,1); if err!=nil || len(sites)!=1 || sites[0]!=site {t.Fatalf("list: %+v %v",sites,err)}
@@ -51,4 +51,20 @@ func TestSiteLimitAndNameValidation(t *testing.T) {
  if _,err=db.Exec("UPDATE sites SET deleted_at=1 WHERE id=(SELECT id FROM sites LIMIT 1)"); err!=nil {t.Fatal(err)}
  if _,err=s.Create(context.Background(),1,strings.Repeat("я",80)); err!=nil {t.Fatalf("80 code points: %v",err)}
  if _,err=s.Create(context.Background(),1,strings.Repeat("я",81)); !errors.As(err,&e) || e.Code!="invalid_request" {t.Fatalf("81 code points: %v",err)}
+}
+
+func TestStableSiteSlugs(t *testing.T) {
+ dir:=t.TempDir(); db,err:=store.Open(dir); if err!=nil {t.Fatal(err)}; defer db.Close()
+ if _,err=db.Exec("INSERT INTO sites(id,owner_id,name,created_at,updated_at) VALUES('s-legacy',1,'glina-i-svet',1,1)"); err!=nil {t.Fatal(err)}
+ s,err:=New(db,dir,Options{SiteSuffix:"sites.example.test"}); if err!=nil {t.Fatal(err)}
+ ctx:=context.Background(); legacy,err:=s.Get(ctx,1,"s-legacy"); if err!=nil {t.Fatal(err)}
+ if legacy.URL!="https://glina-i-svet.sites.example.test" {t.Fatal(legacy.URL)}
+ second,err:=s.Create(ctx,1,"Глина и свет"); if err!=nil {t.Fatal(err)}
+ if second.URL!="https://glina-i-svet-2.sites.example.test" {t.Fatal(second.URL)}
+ if err=s.Delete(ctx,1,legacy.ID); err!=nil {t.Fatal(err)}
+ third,err:=s.Create(ctx,1,"glina-i-svet"); if err!=nil {t.Fatal(err)}
+ if third.URL!="https://glina-i-svet-3.sites.example.test" {t.Fatal(third.URL)}
+ if err=s.Close(); err!=nil {t.Fatal(err)}
+ s,err=New(db,dir,Options{SiteSuffix:"sites.example.test"}); if err!=nil {t.Fatal(err)}; defer s.Close()
+ got,err:=s.Get(ctx,1,second.ID); if err!=nil || got.URL!=second.URL {t.Fatalf("restart changed URL: %+v %v",got,err)}
 }

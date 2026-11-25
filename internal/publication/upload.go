@@ -34,20 +34,22 @@ func (s *Service) CreateUpload(ctx context.Context,identity Identity,siteID,form
  id,err:=randomID(); if err!=nil {return UploadGrant{},err}; var secret [32]byte; if _,err=rand.Read(secret[:]); err!=nil {return UploadGrant{},err}; token:=base64.RawURLEncoding.EncodeToString(secret[:]); digest:=sha256.Sum256([]byte(token)); expires:=now+int64(uploadTTL/time.Second)
  if _,err=s.db.ExecContext(ctx,"INSERT INTO uploads(id,site_id,owner_id,key_id,format,expected_generation,token_hash,state,expires_at) VALUES(?,?,?,?,?,?,?,'pending',?)",id,siteID,identity.OwnerID,identity.KeyID,format,expectedGeneration,digest[:],expires); err!=nil {return UploadGrant{},err}
  contentType:="application/zip"; if format=="tar.gz" {contentType="application/gzip"}
- return UploadGrant{UploadID:id,UploadURL:s.options.UploadOrigin+"/uploads/"+id+"?token="+token,Method:"PUT",ExpiresAt:expires,Format:format,Limits:UploadLimits{maxArchiveBytes,maxExpandedBytes,maxFiles,100,5<<30},Headers:map[string]string{"Content-Type":contentType,"Authorization":"Bearer <MCP key>"}},nil
+ return UploadGrant{UploadID:id,UploadURL:s.options.UploadOrigin+"/uploads/"+id+"?token="+token,Method:"PUT",ExpiresAt:expires,Format:format,Limits:UploadLimits{maxArchiveBytes,maxExpandedBytes,maxFiles,100,5<<30},Headers:map[string]string{"Content-Type":contentType}},nil
 }
 func uploadError(w http.ResponseWriter,status int,code string) {w.Header().Set("Content-Type","application/json"); w.WriteHeader(status); _=json.NewEncoder(w).Encode(map[string]any{"error":map[string]string{"code":code,"message":code}})}
 
-func (s *Service) UploadHandler(authenticate func(string)(Identity,error)) http.Handler {return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+func (s *Service) UploadHandler() http.Handler {return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
  if r.Method!="PUT" {w.Header().Set("Allow","PUT"); uploadError(w,405,"invalid_request"); return}
  origins:=r.Header.Values("Origin"); if len(origins)>1 || len(origins)==1 && origins[0]!=s.options.UploadOrigin {uploadError(w,403,"invalid_request"); return}
- headers:=r.Header.Values("Authorization"); if len(headers)!=1 {uploadError(w,401,"unauthorized"); return}; fields:=strings.Fields(headers[0]); if len(fields)!=2 || !strings.EqualFold(fields[0],"Bearer") {uploadError(w,401,"unauthorized"); return}; identity,err:=authenticate(fields[1]); if err!=nil {uploadError(w,401,"unauthorized"); return}
- id:=strings.TrimPrefix(r.URL.Path,"/uploads/"); if !strings.HasPrefix(r.URL.Path,"/uploads/") || !validStorageID(id) {uploadError(w,404,"not_found"); return}; token:=r.URL.Query().Get("token"); hash:=sha256.Sum256([]byte(token))
+ token:=r.URL.Query().Get("token")
+ id:=strings.TrimPrefix(r.URL.Path,"/uploads/"); if !strings.HasPrefix(r.URL.Path,"/uploads/") || !validStorageID(id) {uploadError(w,404,"not_found"); return}
+ hash:=sha256.Sum256([]byte(token))
  s.mu.Lock(); var owner int64; var key,format,state string; var expires int64; var stored []byte
- err=s.db.QueryRowContext(r.Context(),"SELECT owner_id,key_id,format,state,expires_at,token_hash FROM uploads WHERE id=?",id).Scan(&owner,&key,&format,&state,&expires,&stored)
+ err:=s.db.QueryRowContext(r.Context(),"SELECT owner_id,key_id,format,state,expires_at,token_hash FROM uploads WHERE id=?",id).Scan(&owner,&key,&format,&state,&expires,&stored)
  if err!=nil && !errors.Is(err,sql.ErrNoRows) {s.mu.Unlock(); uploadError(w,503,"service_unavailable"); return}; if err!=nil || len(stored)!=len(hash) || subtle.ConstantTimeCompare(hash[:],stored)!=1 {s.mu.Unlock(); uploadError(w,404,"not_found"); return}
- if owner!=identity.OwnerID || key!=identity.KeyID {s.mu.Unlock(); uploadError(w,401,"unauthorized"); return}
+ identity:=Identity{OwnerID:owner,KeyID:key}
  if expires<=s.now().Unix() {s.mu.Unlock(); uploadError(w,410,"upload_expired"); return}; if state!="pending" {s.mu.Unlock(); uploadError(w,409,"upload_not_ready"); return}
+ if !s.keyValid(r.Context(),identity) {s.mu.Unlock(); uploadError(w,401,"unauthorized"); return}
  contentType:="application/zip"; if format=="tar.gz" {contentType="application/gzip"}; if r.Header.Get("Content-Type")!=contentType {s.mu.Unlock(); uploadError(w,400,"invalid_request"); return}; if r.ContentLength>maxArchiveBytes {_,err=s.db.ExecContext(r.Context(),"UPDATE uploads SET state='failed',error_code='archive_too_large' WHERE id=? AND state='pending'",id); s.mu.Unlock(); if err!=nil {uploadError(w,503,"service_unavailable")} else {uploadError(w,413,"archive_too_large")}; return}
  if !s.freeSpace(maxArchiveBytes+maxExpandedBytes+storageReserve) {s.mu.Unlock(); uploadError(w,507,"storage_full"); return}
  _,err=s.db.ExecContext(r.Context(),"UPDATE uploads SET state='receiving' WHERE id=? AND state='pending'",id); s.mu.Unlock(); if err!=nil {uploadError(w,503,"service_unavailable"); return}

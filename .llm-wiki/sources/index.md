@@ -12,6 +12,7 @@ timestamp: 2026-11-25T07:22:07Z
 - [Браузерные тесты только локально](/sources/no-browser-ci.md)
 - [Динамические домены и размещение сервиса](/sources/dynamic-domains.md)
 - [Контейнерная упаковка и выпуск](/sources/container-release.md)
+- [Короткие адреса и автономная загрузка](/sources/short-hostnames-capability-upload.md)
 - [Локальный запуск make dev](/sources/make-dev.md)
 - [Локальный кабинет и MCP](/sources/local-owner-mcp.md)
 - [Начальные решения static-host](/sources/project-decisions.md) — Снимки архитектуры и правил разработки по итогам обсуждения с владельцем.

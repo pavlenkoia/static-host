@@ -34,10 +34,7 @@ func run() error {
 	defer publications.Close()
 	app, err := web.New(db, keyCipher, cfg.PanelOrigin, cfg.AdminPassword, publications)
 	if err != nil { return err }
-	upload := publications.UploadHandler(func(token string)(publication.Identity,error) {
-		id, owner, err := web.AuthenticateKey(db, token, time.Now().Unix())
-		return publication.Identity{OwnerID:owner,KeyID:id},err
-	})
+	upload := publications.UploadHandler()
 	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, cfg.UploadOrigin, cfg.SiteSuffix, app, mcpserver.New(db, cfg.MCPOrigin, publications), upload, publications.SiteHandler())
 
 	server := &http.Server{
