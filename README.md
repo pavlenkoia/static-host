@@ -37,15 +37,15 @@ curl --noproxy '*' http://127.0.0.1:8081/healthz
 
 ## Контейнер и Uncloud
 
-Образ собирается для `linux/amd64`: `docker build -t static-host:smoke .`, затем `bash scripts/container-smoke.sh static-host:smoke`. Smoke использует временные Docker volumes и не затрагивает `./data`. Образ работает от UID/GID 10001, хранит данные в `/data` и без настроек сохраняет loopback listener.
+Образ собирается для `linux/amd64`: `docker build -t static-host:smoke .`, затем `bash scripts/container-smoke.sh static-host:smoke`. Smoke использует временные Docker volumes и не затрагивает `./data`. Образ работает от UID/GID 10001, хранит данные в `/data` и слушает `0.0.0.0:8081`; для запуска сервера требуется `STATIC_HOST_BASE_DOMAIN`. Listener можно переопределить через `STATIC_HOST_LISTEN`.
 
-`compose.yaml` предназначен для одного экземпляра на выбранной ноде Uncloud. Укажите полный `STATIC_HOST_IMAGE` (предпочтительно GHCR digest), `STATIC_HOST_BASE_DOMAIN`, `STATIC_HOST_MACHINE` и абсолютный `STATIC_HOST_DATA_PATH`. Caddy получает только маршруты `panel.<домен>` и `mcp.<домен>`; DNS, TLS и глобальная конфигурация Caddy здесь не меняются. Обновление stop-first допускает простой; не запускайте две копии с одной SQLite.
+`compose.yaml` предназначен для одного экземпляра на выбранной ноде Uncloud. Укажите `STATIC_HOST_BASE_DOMAIN` и `STATIC_HOST_MACHINE`; образ и каталог данных `/var/lib/static-host` заданы в Compose. Caddy получает только маршруты `panel.<домен>` и `mcp.<домен>`; DNS, TLS и глобальная конфигурация Caddy здесь не меняются. Обновление stop-first допускает простой; не запускайте две копии с одной SQLite.
 
-На выбранной ноде заранее создайте **новый** каталог данных с владельцем `10001:10001` и правами `0700`, например `sudo install -d -m 0700 -o 10001 -g 10001 /absolute/path/to/new-static-host-data`. Не применяйте эту команду к существующему произвольному каталогу. Экспортируйте переменные, включая абсолютный путь, и только для новой базы инициализируйте владельца:
+На выбранной ноде заранее создайте **новый** каталог данных с владельцем `10001:10001` и правами `0700`: `sudo install -d -m 0700 -o 10001 -g 10001 /var/lib/static-host`. Не применяйте эту команду к существующему произвольному каталогу. Только для новой базы инициализируйте владельца:
 
 ```bash
 read -r -s -p 'Password: ' PW; printf '\n'
-printf '%s\n' "$PW" | docker run --rm -i --mount "type=bind,src=$STATIC_HOST_DATA_PATH,dst=/data" "$STATIC_HOST_IMAGE" owner init --login admin
+printf '%s\n' "$PW" | docker run --rm -i --mount type=bind,src=/var/lib/static-host,dst=/data ghcr.io/pavlenkoia/static-host:latest owner init --login admin
 unset PW
 ```
 

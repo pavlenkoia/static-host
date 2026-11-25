@@ -20,7 +20,7 @@ docker volume create "$volume" >/dev/null
 docker volume create "$empty" >/dev/null
 printf '%s\n' container-smoke-password | docker run --rm -i --mount "type=volume,src=$volume,dst=/data" "$image" owner init --login admin
 start() {
-  docker run -d --name "$container" --mount "type=volume,src=$volume,dst=/data" -e STATIC_HOST_LISTEN=0.0.0.0:8081 -e STATIC_HOST_BASE_DOMAIN=example.test -p 127.0.0.1::8081 "$image" >/dev/null
+  docker run -d --name "$container" --mount "type=volume,src=$volume,dst=/data" -e STATIC_HOST_BASE_DOMAIN=example.test -p 127.0.0.1::8081 "$image" >/dev/null
   port=$(docker port "$container" 8081/tcp)
   port=${port##*:}
   url="http://127.0.0.1:$port"
@@ -59,7 +59,7 @@ stop
 start
 login
 stop
-docker run -d --name "$missing" --mount "type=volume,src=$empty,dst=/data" "$image" >/dev/null
+docker run -d --name "$missing" --mount "type=volume,src=$empty,dst=/data" -e STATIC_HOST_BASE_DOMAIN=example.test "$image" >/dev/null
 [[ $(docker wait "$missing") != 0 ]]
 docker logs "$missing" 2>&1 | grep -q 'owner not initialized; run owner init'
 echo 'Container smoke passed'

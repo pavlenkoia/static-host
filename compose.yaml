@@ -2,7 +2,6 @@ services:
   static-host:
     image: ghcr.io/pavlenkoia/static-host:latest
     environment:
-      STATIC_HOST_LISTEN: 0.0.0.0:8081
       STATIC_HOST_BASE_DOMAIN: ${STATIC_HOST_BASE_DOMAIN}
     x-machines:
       - ${STATIC_HOST_MACHINE}
