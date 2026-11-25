@@ -2,6 +2,7 @@ services:
   static-host:
     image: ghcr.io/pavlenkoia/static-host:latest
     environment:
+      STATIC_HOST_BASE_DOMAIN: ${STATIC_HOST_BASE_DOMAIN:?Set STATIC_HOST_BASE_DOMAIN in .env}
       STATIC_HOST_ADMIN_PASSWORD: ${STATIC_HOST_ADMIN_PASSWORD:?Set STATIC_HOST_ADMIN_PASSWORD in .env}
     x-machines:
       - ${STATIC_HOST_MACHINE}

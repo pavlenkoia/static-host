@@ -17,6 +17,7 @@ timestamp: 2026-11-25T07:22:07Z
 - [Начальные решения static-host](/sources/project-decisions.md) — Снимки архитектуры и правил разработки по итогам обсуждения с владельцем.
 - [Обязательные проверки разработки](/sources/development-checks.md)
 - [Пароль администратора из окружения](/sources/env-admin.md)
+- [Первый deploy в Uncloud](/sources/first-deploy.md)
 - [Правила агентов и стандартное подключение OKF](/sources/agent-workflow-correction.md)
 - [Проверка совместимости динамических доменов](/sources/domain-compatibility.md)
 - [Ручной выпуск контейнера](/sources/manual-image-release.md)

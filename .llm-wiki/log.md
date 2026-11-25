@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T14:59:36Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T14:59:35Z — update: sources/first-deploy.md
+
+- 2026-11-25T14:59:07Z — ingest: first-deploy (raw/static-host-first-deploy.md)
+
 - 2026-11-25T14:45:42Z — update: sources/env-admin.md
 
 - 2026-11-25T14:45:42Z — update: sources/make-dev.md
