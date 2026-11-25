@@ -1,5 +1,13 @@
 # Log
 
+- 2026-11-25T19:43:46Z — update: notes/domains-and-security.md
+
+- 2026-11-25T19:43:45Z — update: sources/wildcard-ingress.md
+
+- 2026-11-25T19:43:21Z — ingest: wildcard-ingress (raw/static-host-wildcard-ingress.md)
+
+- 2026-11-25T19:22:55Z — update: sources/first-deploy.md
+
 - 2026-11-25T19:03:20Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T18:56:21Z — update: notes/infrastructure-and-workflow.md

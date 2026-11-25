@@ -4,12 +4,12 @@ title: Домены и безопасность
 description: uc.afbmarket.ru, свои домены без TXT и принятый риск IP-проверки.
 sources: [raw/2026-11-25-domains.md]
 tags: [dns, domains, tls, security]
-timestamp: 2026-11-25T13:09:24Z
+timestamp: 2026-11-25T19:43:46Z
 ---
 
 # Домены и безопасность
 
-Базовый домен задаётся установкой; `uc.afbmarket.ru` — исторический пример, не default. При заданном домене кабинет и MCP доступны на HTTPS `panel.<домен>` и `mcp.<домен>`. Адреса upload и сайтов пока не реализованы. Site-id генерируется сервером и не переиспользуется. Выбор домена не означает выполненную настройку DNS.
+Базовый домен задаётся установкой; в текущей установке — `uc.afbmarket.ru`. Панель, MCP и upload используют отдельные hostname; системные сайты доступны по `https://<site-id>.sites.uc.afbmarket.ru`. [Публичный wildcard ingress](/sources/wildcard-ingress.md) настроен и проверен сквозной публикацией: wildcard DNS на edge-1, сертификат Let's Encrypt через Cloudflare DNS challenge, маршрут на приложение. Site-id генерируется сервером и не переиспользуется. Собственные домены пока не реализованы.
 
 Свои домены подключаются без отдельной TXT-проверки. Основной путь: CNAME на системный адрес конкретного сайта. Сервис проверяет соответствие выбранному сайту, уникальность hostname, направление трафика и готовность HTTPS.
 
@@ -47,3 +47,7 @@ Lifecycle: pending_dns → provisioning_tls → active; active требует п
 - time: 2026-11-25T13:09:24Z
   kind: decision
   summary: "Базовый домен задаётся установкой, а не фиксирован по умолчанию"
+
+- time: 2026-11-25T19:43:46Z
+  kind: evidence
+  summary: "Системные сайты доступны через production wildcard ingress"

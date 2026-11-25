@@ -20,6 +20,7 @@ timestamp: 2026-11-25T07:22:07Z
 - [Первый deploy в Uncloud](/sources/first-deploy.md)
 - [Правила агентов и стандартное подключение OKF](/sources/agent-workflow-correction.md)
 - [Проверка совместимости динамических доменов](/sources/domain-compatibility.md)
+- [Публичный wildcard ingress системных сайтов](/sources/wildcard-ingress.md)
 - [Ручной выпуск контейнера](/sources/manual-image-release.md)
 
 <!-- /okf:auto-index -->

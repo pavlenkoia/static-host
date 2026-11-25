@@ -10,6 +10,12 @@ services:
       panel.${STATIC_HOST_BASE_DOMAIN}, mcp.${STATIC_HOST_BASE_DOMAIN}, upload.${STATIC_HOST_BASE_DOMAIN} {
         reverse_proxy {{upstreams 8081}}
       }
+      *.sites.${STATIC_HOST_BASE_DOMAIN} {
+        tls {
+          dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+        }
+        reverse_proxy {{upstreams 8081}}
+      }
     volumes:
       - /var/lib/static-host:/data
     deploy:
