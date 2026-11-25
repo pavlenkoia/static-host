@@ -1,6 +1,7 @@
 package web
 
 import (
+ "crypto/cipher"
  "crypto/rand"
  "crypto/sha256"
  "crypto/subtle"
@@ -23,20 +24,20 @@ import (
 //go:embed dist
 var assets embed.FS
 
-type Server struct { DB *sql.DB; Now func() time.Time; mu sync.Mutex; failures []time.Time; dummy string }
-func New(db *sql.DB) (*Server,error) { hash, err := auth.Hash("unusable-dummy-password"); if err != nil { return nil,err }; return &Server{DB:db,Now:time.Now,dummy:hash},nil }
+type Server struct { DB *sql.DB; KeyCipher cipher.AEAD; Host string; Now func() time.Time; mu sync.Mutex; failures []time.Time; dummy string }
+func New(db *sql.DB, keyCipher cipher.AEAD) (*Server,error) { if keyCipher==nil { return nil,errors.New("nil key cipher") }; hash, err := auth.Hash("unusable-dummy-password"); if err != nil { return nil,err }; return &Server{DB:db,KeyCipher:keyCipher,Host:"127.0.0.1:8081",Now:time.Now,dummy:hash},nil }
 func fmtSeconds(d time.Duration) string { return strconv.FormatInt(int64((d+time.Second-1)/time.Second),10) }
 func random(n int) (string,error) { b:=make([]byte,n); if _,err:=rand.Read(b); err!=nil{return "",err}; return base64.RawURLEncoding.EncodeToString(b),nil }
 func digest(s string) []byte { h:=sha256.Sum256([]byte(s)); return h[:] }
 func jsonError(w http.ResponseWriter, code int, text string) { jsonReply(w,code,map[string]string{"error":text}) }
 func jsonReply(w http.ResponseWriter, code int, v any) { w.Header().Set("Content-Type","application/json"); w.WriteHeader(code); _=json.NewEncoder(w).Encode(v) }
 func decode(w http.ResponseWriter,r *http.Request,v any) bool { ct,_,_:=mime.ParseMediaType(r.Header.Get("Content-Type")); if ct!="application/json" { jsonError(w,415,"unsupported_media_type"); return false }; r.Body=http.MaxBytesReader(w,r.Body,4096); d:=json.NewDecoder(r.Body); d.DisallowUnknownFields(); if d.Decode(v)!=nil { jsonError(w,400,"invalid_request"); return false }; var extra any; if d.Decode(&extra)!=io.EOF { jsonError(w,400,"invalid_request"); return false }; return true }
-func origin(r *http.Request) bool { values:=r.Header.Values("Origin"); return len(values)==1 && (values[0]=="http://127.0.0.1:8080" || values[0]=="http://127.0.0.1:5173") }
+func (s *Server) origin(r *http.Request) bool { values:=r.Header.Values("Origin"); return len(values)==1 && (values[0]=="http://"+s.Host || values[0]=="http://127.0.0.1:5173") }
 func emptyBody(w http.ResponseWriter,r *http.Request) bool { var b [1]byte; n,err:=r.Body.Read(b[:]); if n!=0 || (err!=nil && err!=io.EOF) { jsonError(w,400,"invalid_request"); return false }; return true }
 func (s *Server) ServeHTTP(w http.ResponseWriter,r *http.Request) {
  w.Header().Set("X-Content-Type-Options","nosniff"); w.Header().Set("Referrer-Policy","no-referrer"); w.Header().Set("Cache-Control","no-store")
- if r.Host!="127.0.0.1:8080" { http.Error(w,"Forbidden",403); return }
- if strings.HasPrefix(r.URL.Path,"/api/") { if r.Method!="GET" && r.Method!="HEAD" && !origin(r) { jsonError(w,403,"forbidden"); return }; s.api(w,r); return }
+ if r.Host!=s.Host { http.Error(w,"Forbidden",403); return }
+ if strings.HasPrefix(r.URL.Path,"/api/") { if r.Method!="GET" && r.Method!="HEAD" && !s.origin(r) { jsonError(w,403,"forbidden"); return }; s.api(w,r); return }
  if r.URL.Path=="/" || r.URL.Path=="/login" { if r.Method!="GET" && r.Method!="HEAD" { http.Error(w,"Method not allowed",405); return }; w.Header().Set("Content-Security-Policy","default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"); b,_:=assets.ReadFile("dist/index.html"); w.Header().Set("Content-Type","text/html; charset=utf-8"); if r.Method=="GET" { _,_=w.Write(b) }; return }
  if strings.HasPrefix(r.URL.Path,"/assets/") { b,err:=assets.ReadFile("dist"+r.URL.Path); if err!=nil { http.NotFound(w,r); return }; w.Header().Set("Cache-Control","public, max-age=31536000, immutable"); if ct:=mime.TypeByExtension(r.URL.Path[strings.LastIndex(r.URL.Path,"."):]); ct!="" { w.Header().Set("Content-Type",ct) }; if r.Method=="GET" { _,_=w.Write(b) } else if r.Method!="HEAD" { http.Error(w,"Method not allowed",405) }; return }
  http.NotFound(w,r)

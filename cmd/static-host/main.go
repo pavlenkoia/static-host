@@ -24,8 +24,11 @@ func run() error {
 	}
 	flags := flag.NewFlagSet("static-host", flag.ContinueOnError)
 	dir := flags.String("data-dir", "./data", "data directory")
+	port := flags.Int("port", 8081, "loopback HTTP port")
 	if err := flags.Parse(args); err != nil { return err }
 	if flags.NArg() != 0 { return errors.New("unexpected arguments") }
+	if *port < 1 || *port > 65535 { return errors.New("port must be between 1 and 65535") }
+	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	db, err := store.Open(*dir)
 	if err != nil { return err }
 	defer db.Close()
@@ -38,14 +41,17 @@ func run() error {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		fmt.Fprint(w, "ok\n")
 	})
-	app, err := web.New(db)
+	keyCipher, err := auth.LoadKeyCipher(*dir, db)
 	if err != nil { return err }
+	app, err := web.New(db, keyCipher)
+	if err != nil { return err }
+	app.Host = addr
 	mux.Handle("/mcp", mcpserver.New(db))
 	mux.Handle("/", app)
 
 	server := &http.Server{
-		Addr:              "127.0.0.1:8080",
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { if r.Host != "127.0.0.1:8080" { http.Error(w,"Forbidden",http.StatusForbidden); return }; mux.ServeHTTP(w,r) }),
+		Addr:              addr,
+		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { if r.Host != addr { http.Error(w,"Forbidden",http.StatusForbidden); return }; mux.ServeHTTP(w,r) }),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}

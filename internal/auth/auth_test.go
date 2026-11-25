@@ -9,7 +9,7 @@ func TestOwnerReset(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
  if err=Init(db," admin ","first-password"); err!=nil {t.Fatal(err)}
  if err=Init(db,"admin","other-password"); err==nil {t.Fatal("duplicate owner accepted")}
- _,err=db.Exec("INSERT INTO sessions VALUES(x'01',1,'csrf',1,9999999999); INSERT INTO agent_keys VALUES('id',1,'test',x'02',1,9999999999,NULL)"); if err!=nil {t.Fatal(err)}
+ _,err=db.Exec("INSERT INTO sessions VALUES(x'01',1,'csrf',1,9999999999); INSERT INTO agent_keys(id,owner_id,name,token_hash,created_at,expires_at,revoked_at) VALUES('id',1,'test',x'02',1,9999999999,NULL)"); if err!=nil {t.Fatal(err)}
  if err=Reset(db,"second-password"); err!=nil {t.Fatal(err)}
  var hash string; if err=db.QueryRow("SELECT password_hash FROM users WHERE login='admin'").Scan(&hash); err!=nil {t.Fatal(err)}
  if Compare(hash,"first-password") || !Compare(hash,"second-password") {t.Fatal("password was not reset")}

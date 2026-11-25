@@ -1,43 +1,87 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted,onBeforeUnmount,ref,watch } from 'vue'
 import { useRouter } from 'vue-router'
-const router = useRouter()
-type Key = { id: string; name: string; created_at: number; expires_at: number; status: string }
-const sessionUnavailable = ref(false)
-watch(() => router.currentRoute.value.path, () => { token.value = '' })
-const user = ref(''), csrf = ref(''), login = ref(''), password = ref(''), name = ref(''), days = ref(90), token = ref(''), error = ref(''), loading = ref(true), busy = ref(false), keys = ref<Key[]>([]), confirm = ref('')
-async function api(path: string, method = 'GET', body?: unknown) {
- const headers: Record<string,string> = {}
- if (body !== undefined) headers['Content-Type'] = 'application/json'
- if (method !== 'GET' && csrf.value) headers['X-CSRF-Token'] = csrf.value
- const response = await fetch(path, { method, headers, credentials: 'same-origin', ...(body !== undefined ? { body: JSON.stringify(body) } : {}) })
- if (!response.ok) { if (response.status === 401 && path !== '/api/login') { user.value = ''; csrf.value = ''; token.value = ''; keys.value = []; await router.replace('/login') }; throw new Error(response.status === 401 && path === '/api/login' ? 'Неверный логин или пароль' : `Ошибка сервиса (${response.status})`) }
- return response.status === 204 ? null : response.json()
+import type { AgentKey } from './components/types'
+import KeyList from './components/KeyList.vue'
+import KeyCreateDialog from './components/KeyCreateDialog.vue'
+import UiButton from './components/ui/UiButton.vue'
+import UiField from './components/ui/UiField.vue'
+import UiInput from './components/ui/UiInput.vue'
+import UiDialog from './components/ui/UiDialog.vue'
+import UiNotice from './components/ui/UiNotice.vue'
+import UiEmptyState from './components/ui/UiEmptyState.vue'
+import UiSkeleton from './components/ui/UiSkeleton.vue'
+const router=useRouter()
+const user=ref(''),csrf=ref(''),login=ref(''),password=ref(''),sessionError=ref(''),loginError=ref(''),listError=ref(''),dialogError=ref(''),notice=ref('')
+const sessionLoading=ref(true),listLoading=ref(false),loginBusy=ref(false),logoutBusy=ref(false),createBusy=ref(false),createOpen=ref(false),confirmBusy=ref(false)
+const keys=ref<AgentKey[]>([]),revealed=ref<Record<string,string>>({}),busy=ref<Record<string,boolean>>({}),confirmation=ref<{key:AgentKey;action:'revoke'|'delete'}|null>(null)
+let generation=0
+function clearSecrets(){generation++;revealed.value={}}
+function clearSession(){clearSecrets();user.value='';csrf.value='';keys.value=[];createOpen.value=false;confirmation.value=null}
+function visibility(){if(document.hidden)clearSecrets()}
+watch(()=>router.currentRoute.value.path,clearSecrets)
+onMounted(()=>{document.addEventListener('visibilitychange',visibility);refresh()})
+onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',visibility);clearSecrets()})
+async function api(path:string,method='GET',body?:unknown){
+ const headers:Record<string,string>={};if(body!==undefined)headers['Content-Type']='application/json';if(method!=='GET'&&csrf.value)headers['X-CSRF-Token']=csrf.value
+ const response=await fetch(path,{method,headers,credentials:'same-origin',...(body!==undefined?{body:JSON.stringify(body)}:{})})
+ if(!response.ok){if(response.status===401&&path!=='/api/login'){clearSession();await router.replace('/login')}throw new Error(response.status===401&&path==='/api/login'?'Неверный логин или пароль':`Ошибка сервиса (${response.status})`)}
+ return response.status===204?null:response.json()
 }
-async function refresh() { loading.value = true; sessionUnavailable.value = false; error.value = ''; try { const s = await api('/api/session'); user.value = s.login; csrf.value = s.csrf_token; await router.replace('/'); keys.value = (await api('/api/keys')).keys } catch (e) { if (user.value || !(e instanceof Error && e.message.includes('401'))) { sessionUnavailable.value = !user.value; error.value = String(e instanceof Error ? e.message : e) } } finally { loading.value = false } }
-async function signIn() { busy.value = true; error.value = ''; try { const s = await api('/api/login', 'POST', { login: login.value, password: password.value }); user.value = s.login; csrf.value = s.csrf_token; await router.replace('/'); keys.value = (await api('/api/keys')).keys } catch(e) { error.value = String(e instanceof Error ? e.message : e) } finally { password.value = ''; busy.value = false } }
-async function signOut() { busy.value = true; error.value = ''; try { await api('/api/logout', 'POST'); user.value = ''; csrf.value = ''; token.value = ''; keys.value = []; await router.replace('/login') } catch(e) { error.value = String(e instanceof Error ? e.message : e) } finally { busy.value = false } }
-async function createKey() { busy.value = true; error.value = ''; try { const result = await api('/api/keys', 'POST', { name: name.value, expires_in_days: days.value }); token.value = result.token; name.value = ''; keys.value = (await api('/api/keys')).keys } catch(e) { error.value = String(e instanceof Error ? e.message : e) } finally { busy.value = false } }
-async function revoke(id: string) { busy.value = true; error.value = ''; try { await api(`/api/keys/${encodeURIComponent(id)}/revoke`, 'POST'); confirm.value = ''; keys.value = (await api('/api/keys')).keys } catch(e) { error.value = String(e instanceof Error ? e.message : e) } finally { busy.value = false } }
-onMounted(refresh)
+const message=(e:unknown)=>e instanceof Error?e.message:'Ошибка сервиса'
+async function loadKeys(){listLoading.value=true;listError.value='';try{keys.value=(await api('/api/keys')).keys}catch(e){if(user.value)listError.value=message(e)}finally{listLoading.value=false}}
+async function refresh(){sessionLoading.value=true;sessionError.value='';try{const s=await api('/api/session');user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await loadKeys()}catch(e){if(!message(e).includes('(401)'))sessionError.value=message(e)}finally{sessionLoading.value=false}}
+async function signIn(){loginBusy.value=true;loginError.value='';try{const s=await api('/api/login','POST',{login:login.value,password:password.value});user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await loadKeys()}catch(e){loginError.value=message(e)}finally{password.value='';loginBusy.value=false}}
+async function signOut(){logoutBusy.value=true;try{await api('/api/logout','POST');clearSession();await router.replace('/login')}catch(e){listError.value=message(e)}finally{logoutBusy.value=false}}
+async function create(input:{name:string;expires_in_days:number|null}){createBusy.value=true;dialogError.value='';try{const result=await api('/api/keys','POST',input);keys.value=[result.key,...keys.value];createOpen.value=false;notice.value='Ключ создан'}catch(e){dialogError.value=message(e)}finally{createBusy.value=false}}
+function openCreate(){dialogError.value='';createOpen.value=true}
+async function reveal(id:string,show:boolean){const current=generation;busy.value[id]=true;try{const result=await api(`/api/keys/${encodeURIComponent(id)}/reveal`,'POST');if(current!==generation||!user.value||document.hidden)return;if(show)revealed.value[id]=result.token;else {try{await navigator.clipboard.writeText(result.token);if(current===generation)notice.value='Скопировано'}catch{if(current===generation)listError.value='Не удалось скопировать. Нажмите «Показать» и скопируйте значение вручную.'}}}catch(e){if(current===generation)listError.value=message(e)}finally{delete busy.value[id]}}
+function hide(id:string){delete revealed.value[id];generation++}
+async function copy(id:string){if(!revealed.value[id])return reveal(id,false);try{await navigator.clipboard.writeText(revealed.value[id]);notice.value='Скопировано'}catch{listError.value='Не удалось скопировать. Скопируйте показанное значение вручную.'}}
+function confirmAction(key:AgentKey,action:'revoke'|'delete'){dialogError.value='';confirmation.value={key,action}}
+async function perform(){const c=confirmation.value;if(!c)return;confirmBusy.value=true;busy.value[c.key.id]=true;dialogError.value='';try{const path=`/api/keys/${encodeURIComponent(c.key.id)}`;await api(c.action==='revoke'?path+'/revoke':path,c.action==='revoke'?'POST':'DELETE');if(c.action==='delete'){keys.value=keys.value.filter(k=>k.id!==c.key.id);hide(c.key.id)}else{const k=keys.value.find(k=>k.id===c.key.id);if(k){k.status='revoked';k.revoked_at=Math.floor(Date.now()/1000)}}confirmation.value=null;notice.value=c.action==='delete'?'Ключ удалён':'Ключ отозван'}catch(e){dialogError.value=message(e)}finally{delete busy.value[c.key.id];confirmBusy.value=false}}
 </script>
 <template>
- <main class="mx-auto max-w-4xl p-5 text-slate-900">
-  <h1 class="text-2xl font-semibold mb-6">Кабинет владельца</h1>
-  <p v-if="loading">Загрузка…</p>
-  <template v-else>
-   <p v-if="error" role="alert" class="mb-4 text-red-700">{{ error }} <button v-if="!user && error !== 'Неверный логин или пароль'" @click="refresh" class="underline">Повторить</button></p>
-   <form v-if="!user && !sessionUnavailable" @submit.prevent="signIn" class="grid gap-4 max-w-sm">
-    <label>Логин<input v-model="login" autocomplete="username" required class="block w-full border rounded p-2"></label>
-    <label>Пароль<input v-model="password" type="password" autocomplete="current-password" required class="block w-full border rounded p-2"></label>
-    <button :disabled="busy" class="bg-slate-900 text-white rounded p-2 disabled:opacity-50">{{ busy ? 'Вход…' : 'Войти' }}</button>
+ <div v-if="sessionLoading" class="grid min-h-dvh place-items-center p-6">
+  <div class="grid w-full max-w-[420px] gap-4 rounded-card border border-border bg-surface p-6 shadow-card md:p-8" aria-busy="true"><span class="sr-only">Загрузка</span><UiSkeleton/><UiSkeleton shape="block"/></div>
+ </div>
+ <div v-else-if="sessionError" class="grid min-h-dvh place-items-center p-6"><UiNotice tone="error" title="Не удалось проверить сессию">{{ sessionError }}<template #action><UiButton @click="refresh">Повторить</UiButton></template></UiNotice></div>
+ <main v-else-if="!user" class="grid min-h-dvh place-items-center p-6">
+  <section class="w-full max-w-[420px] rounded-card border border-border bg-surface p-6 shadow-card md:p-8">
+   <div class="mb-10 flex items-center gap-2.5 text-[17px] font-semibold tracking-tight"><span class="grid size-8 place-items-center rounded-control bg-accent text-white">s</span> static-host</div>
+   <h1 class="text-[28px] leading-9 font-semibold tracking-tight">Вход в кабинет</h1><p class="mt-2 text-muted">Войдите, чтобы управлять доступом агентов.</p>
+   <form class="mt-8 grid gap-5" @submit.prevent="signIn">
+    <UiNotice v-if="loginError" tone="error">{{ loginError }}</UiNotice>
+    <UiField v-slot="field" id="login" label="Логин"><UiInput :id="field.id" v-model="login" autocomplete="username" required /></UiField>
+    <UiField v-slot="field" id="password" label="Пароль"><UiInput :id="field.id" v-model="password" type="password" autocomplete="current-password" required /></UiField>
+    <UiButton class="w-full" variant="primary" type="submit" :loading="loginBusy">Войти</UiButton>
    </form>
-   <template v-else-if="user">
-    <div class="flex justify-between gap-4 mb-6"><span>{{ user }}</span><button :disabled="busy" @click="signOut" class="underline">Выйти</button></div>
-    <section v-if="token" class="border rounded p-4 mb-6 break-all"><p class="mb-2">Сохраните ключ: он больше не будет показан.</p><input :value="token" readonly class="border p-2 w-full"><button @click="token = ''" class="underline mt-2">Закрыть</button></section>
-    <form @submit.prevent="createKey" class="grid gap-3 mb-8"><h2 class="text-xl">Создать ключ агента</h2><label>Название<input v-model="name" required maxlength="160" class="block border rounded p-2 w-full"></label><label>Срок в днях<input v-model.number="days" type="number" min="1" max="365" required class="block border rounded p-2"></label><button :disabled="busy" class="bg-slate-900 text-white rounded p-2 disabled:opacity-50">Создать</button></form>
-    <h2 class="text-xl mb-3">Ключи</h2><p v-if="!keys.length">Ключей пока нет.</p><ul class="grid gap-3"><li v-for="key in keys" :key="key.id" class="border rounded p-4 break-all"><p class="font-semibold">{{ key.name }}</p><p>ID: {{ key.id }}</p><p>Создан: {{ new Date(key.created_at * 1000).toLocaleString() }}</p><p>Истекает: {{ new Date(key.expires_at * 1000).toLocaleString() }}</p><p>Статус: {{ key.status }}</p><template v-if="key.status !== 'revoked'"><button v-if="confirm !== key.id" @click="confirm = key.id" :disabled="busy" class="underline">Отозвать</button><div v-else class="flex gap-4"><span>Отозвать ключ?</span><button @click="confirm = ''" :disabled="busy" class="underline">Отмена</button><button @click="revoke(key.id)" :disabled="busy" class="underline">Отозвать</button></div></template></li></ul>
-   </template>
-  </template>
+  </section>
  </main>
+ <div v-else class="mx-auto max-w-[1120px] px-4 md:px-6">
+  <header class="flex h-[72px] items-center justify-between border-b border-border md:h-20">
+   <div class="flex items-center gap-2.5 text-[17px] font-semibold tracking-tight"><span class="grid size-8 place-items-center rounded-control bg-accent text-white">s</span> static-host</div>
+   <div class="flex items-center gap-3 text-muted"><span class="hidden md:inline">{{ user }}</span><UiButton variant="ghost" :loading="logoutBusy" @click="signOut">Выйти</UiButton></div>
+  </header>
+  <main class="pt-8 pb-20 md:pt-12">
+   <div class="mb-8 grid gap-5 md:flex md:items-start md:justify-between md:gap-6">
+    <div><h1 class="text-[28px] leading-9 font-semibold tracking-tight md:text-[32px] md:leading-10">Ключи агентов</h1><p class="mt-2 text-base leading-6 text-muted">Управляйте доступом агентов к вашему кабинету.</p></div>
+    <UiButton class="w-full md:w-auto" variant="primary" @click="openCreate">Создать ключ</UiButton>
+   </div>
+   <div class="grid gap-4">
+    <div aria-live="polite"><UiNotice v-if="notice" tone="success">{{ notice }}</UiNotice></div>
+    <UiNotice v-if="listError" tone="error">{{ listError }}<template #action><UiButton @click="loadKeys">Повторить</UiButton></template></UiNotice>
+    <div v-if="listLoading" class="grid gap-4 rounded-card border border-border bg-surface p-6 shadow-card" aria-busy="true"><span class="sr-only">Загрузка ключей</span><UiSkeleton/><UiSkeleton shape="block"/><UiSkeleton shape="block"/></div>
+    <template v-else-if="!listError || keys.length">
+     <KeyList v-if="keys.length" :keys="keys" :revealed="revealed" :busy="busy" @show="id=>reveal(id,true)" @hide="hide" @copy="copy" @revoke="key=>confirmAction(key,'revoke')" @delete="key=>confirmAction(key,'delete')"/>
+     <div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Ключей пока нет" description="Создайте ключ, чтобы подключить агента к MCP."><template #action><UiButton variant="primary" @click="openCreate">Создать ключ</UiButton></template></UiEmptyState></div>
+    </template>
+   </div>
+  </main>
+  <KeyCreateDialog :open="createOpen" :busy="createBusy" :error="dialogError" @close="createOpen=false" @submit="create"/>
+  <UiDialog :open="!!confirmation" :title="confirmation?.action==='delete'?'Удалить ключ?':'Отозвать ключ?'" :description="confirmation?.action==='delete'?'Ключ будет удалён без возможности восстановления. Если он активен, агент сразу потеряет доступ.':'Доступ агента прекратится немедленно.'" :busy="confirmBusy" @close="confirmation=null">
+   <p v-if="confirmation">Ключ: <strong>{{ confirmation.key.name }}</strong></p><UiNotice v-if="dialogError" tone="error">{{ dialogError }}</UiNotice>
+   <template #footer><UiButton :disabled="confirmBusy" @click="confirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="confirmBusy" @click="perform">{{ confirmation?.action==='delete'?'Удалить':'Отозвать' }}</UiButton></template>
+  </UiDialog>
+ </div>
 </template>

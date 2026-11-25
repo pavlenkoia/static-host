@@ -28,12 +28,20 @@ func initialize(db *sql.DB) error {
  tx, err := db.BeginTx(context.Background(), nil); if err != nil { return err }; defer tx.Rollback()
  var version int
  if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil { return err }
- if version > 1 { return fmt.Errorf("unsupported database schema version %d", version) }
+ if version > 2 { return fmt.Errorf("unsupported database schema version %d", version) }
  if version == 0 {
   _, err = tx.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
 CREATE TABLE agent_keys(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER);
 CREATE TABLE sessions(token_hash BLOB PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), csrf_token TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 PRAGMA user_version=1;`)
+  if err != nil { return err }
+ }
+ if version <= 1 {
+  _, err = tx.Exec(`CREATE TABLE agent_keys_v2(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER, token_ciphertext BLOB);
+INSERT INTO agent_keys_v2(id,owner_id,name,token_hash,created_at,expires_at,revoked_at) SELECT id,owner_id,name,token_hash,created_at,expires_at,revoked_at FROM agent_keys;
+DROP TABLE agent_keys;
+ALTER TABLE agent_keys_v2 RENAME TO agent_keys;
+PRAGMA user_version=2;`)
   if err != nil { return err }
  }
  return tx.Commit()
