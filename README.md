@@ -53,7 +53,7 @@ unset PW
 
 После подготовки и отдельного разрешения на развёртывание: `uc deploy -f compose.yaml --no-build`. Это не настраивает DNS или глобальный Caddy и не проверяет доступность кластера.
 
-Workflow **Container image** выполняет проверки и smoke на push, PR и ручном запуске; публикует в GHCR только для default branch после успешного smoke. Теги — `sha-<полный SHA>` и `latest`. После первой публикации владелец должен один раз выбрать package → **Change visibility → Public**, затем подтвердить публичность анонимным `docker pull ghcr.io/<owner>/<repo>:<tag>` без сохранённой авторизации. Публикация сама по себе не подтверждает публичную видимость.
+Workflow **Container image** запускается только вручную: GitHub → Actions → Container image → Run workflow → ветка `main` (либо `gh workflow run image.yml --ref main`). На push и PR образ не собирается; при выборе другой ветки job пропускается. Выпуск выполняет `make check-fast`, сборку и smoke, затем публикует в GHCR теги `sha-<полный SHA>` и `latest`. Deploy не выполняется. После первой публикации владелец должен один раз выбрать package → **Change visibility → Public**, затем подтвердить публичность анонимным `docker pull ghcr.io/<owner>/<repo>:<tag>` без сохранённой авторизации. Публикация сама по себе не подтверждает публичную видимость.
 
 ## Обязательные проверки разработки
 

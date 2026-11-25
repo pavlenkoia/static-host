@@ -16,5 +16,6 @@ timestamp: 2026-11-25T07:22:07Z
 - [Обязательные проверки разработки](/sources/development-checks.md)
 - [Правила агентов и стандартное подключение OKF](/sources/agent-workflow-correction.md)
 - [Проверка совместимости динамических доменов](/sources/domain-compatibility.md)
+- [Ручной выпуск контейнера](/sources/manual-image-release.md)
 
 <!-- /okf:auto-index -->

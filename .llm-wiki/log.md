@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T14:08:45Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T14:08:45Z — update: sources/manual-image-release.md
+
+- 2026-11-25T14:08:27Z — ingest: manual-image-release (raw/static-host-manual-image-release.md)
+
 - 2026-11-25T14:02:52Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T14:02:52Z — update: sources/no-browser-ci.md
