@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T11:36:46Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T11:36:46Z — update: sources/development-checks.md
+
+- 2026-11-25T11:35:33Z — ingest: development-checks (raw/README.md)
+
 - 2026-11-25T11:20:40Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T11:19:12Z — update: notes/infrastructure-and-workflow.md

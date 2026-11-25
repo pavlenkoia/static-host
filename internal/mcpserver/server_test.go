@@ -28,6 +28,51 @@ func TestSDKPingAndRevocation(t *testing.T) {
  if err=session.Ping(context.Background(),&mcp.PingParams{}); err==nil {t.Fatal("revoked key accepted")}
 }
 
+func TestExpiredKeyRejectedByMCPRequest(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	token := "sh_expires"
+	hash := sha256.Sum256([]byte(token))
+	if _, err := db.Exec("INSERT INTO users VALUES(1,'admin','hash')"); err != nil {
+		t.Fatal(err)
+	}
+	expires := time.Now().Unix() + 60
+	if _, err := db.Exec("INSERT INTO agent_keys(id,owner_id,name,token_hash,created_at,expires_at) VALUES('expiring',1,'test',?,?,?)", hash[:], time.Now().Unix(), expires); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := web.AuthenticateKey(db, token, expires-1); err != nil {
+		t.Fatalf("key rejected before expiration: %v", err)
+	}
+	if _, _, err := web.AuthenticateKey(db, token, expires); err == nil {
+		t.Fatal("key accepted at expiration boundary")
+	}
+
+	server := httptest.NewServer(New(db))
+	defer server.Close()
+	client := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil)
+	session, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{
+		Endpoint: server.URL,
+		HTTPClient: &http.Client{Transport: bearer{token}},
+	}, &mcp.ClientSessionOptions{ProtocolVersion: "2025-11-25"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if err := session.Ping(context.Background(), &mcp.PingParams{}); err != nil {
+		t.Fatalf("key rejected before expiration: %v", err)
+	}
+	if _, err := db.Exec("UPDATE agent_keys SET expires_at=?", time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	if err := session.Ping(context.Background(), &mcp.PingParams{}); err == nil {
+		t.Fatal("MCP request accepted expired key")
+	}
+}
+
 func TestUnlimitedKeyDeletedByOwner(t *testing.T) {
  db,err:=store.Open(t.TempDir()); if err!=nil {t.Fatal(err)}; defer db.Close()
  token:="sh_unlimited"; hash:=sha256.Sum256([]byte(token)); sessionHash:=sha256.Sum256([]byte("session"))

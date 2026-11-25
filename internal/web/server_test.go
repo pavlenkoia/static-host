@@ -83,3 +83,60 @@ func TestConfiguredHostAndOrigin(t *testing.T) {
   r:=httptest.NewRequest("POST","http://"+tc.host+"/api/keys/id/reveal",nil);r.Header.Set("Origin",tc.origin);w:=httptest.NewRecorder();s.ServeHTTP(w,r);if w.Code!=tc.want {t.Fatalf("host=%s origin=%s: %d, want %d",tc.host,tc.origin,w.Code,tc.want)}
  }
 }
+
+func TestSessionExpirationBoundary(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := auth.Init(db, "admin", "long-password-one"); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(db, testCipher(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Host = "127.0.0.1:8080"
+	const now = int64(100000)
+	s.Now = func() time.Time { return time.Unix(now-1, 0) }
+	if _, err := db.Exec("INSERT INTO sessions VALUES(?,1,'csrf',?,?)", digest("expiring"), now-10, now); err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "http://127.0.0.1:8080"+path, bytes.NewBufferString(body))
+		r.AddCookie(&http.Cookie{Name: "static_host_session", Value: "expiring"})
+		r.Header.Set("Origin", "http://127.0.0.1:8080")
+		r.Header.Set("X-CSRF-Token", "csrf")
+		if body != "" {
+			r.Header.Set("Content-Type", "application/json")
+		}
+		w := httptest.NewRecorder()
+		s.ServeHTTP(w, r)
+		return w
+	}
+
+	if w := request("GET", "/api/session", ""); w.Code != http.StatusOK {
+		t.Fatalf("session rejected before expiration: %d", w.Code)
+	}
+	if w := request("POST", "/api/keys", `{"name":"before"}`); w.Code != http.StatusCreated {
+		t.Fatalf("mutation rejected before expiration: %d %s", w.Code, w.Body)
+	}
+	s.Now = func() time.Time { return time.Unix(now, 0) }
+	if w := request("GET", "/api/session", ""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("session accepted at expiration boundary: %d", w.Code)
+	}
+	if w := request("POST", "/api/keys", `{"name":"after"}`); w.Code != http.StatusUnauthorized {
+		t.Fatalf("mutation accepted at expiration boundary: %d %s", w.Code, w.Body)
+	}
+	if w := request("POST", "/api/logout", ""); w.Code != http.StatusNoContent {
+		t.Fatalf("logout of expired session: %d %s", w.Code, w.Body)
+	}
+	var count int
+	if err := db.QueryRow("SELECT count(*) FROM agent_keys").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("expired session mutation persisted, got %d keys", count)
+	}
+}
