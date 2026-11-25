@@ -1,5 +1,9 @@
 # Log
 
+- 2026-11-25T13:09:24Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T13:09:24Z — update: notes/domains-and-security.md
+
 - 2026-11-25T12:32:39Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T12:32:39Z — update: notes/domains-and-security.md

@@ -53,7 +53,7 @@ test('owner login, API protections, and agent key lifecycle', async ({ page, req
 
   const mcp = async () => request.post('/mcp', {
     data: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'browser-e2e', version: '1.0' } } },
-    headers: { Authorization: `Bearer ${token}`, Origin: 'http://127.0.0.1:5173', Accept: 'application/json, text/event-stream' },
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json, text/event-stream' },
   })
   expect((await mcp()).status()).toBe(200)
 

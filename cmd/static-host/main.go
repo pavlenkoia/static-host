@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"time"
 
 	"static-host/internal/auth"
+	"static-host/internal/config"
+	"static-host/internal/httpserver"
 	"static-host/internal/mcpserver"
 	"static-host/internal/store"
 	"static-host/internal/web"
@@ -22,36 +23,24 @@ func run() error {
 	if len(args) > 0 && args[0] == "owner" {
 		return owner(args[1:])
 	}
-	flags := flag.NewFlagSet("static-host", flag.ContinueOnError)
-	dir := flags.String("data-dir", "./data", "data directory")
-	port := flags.Int("port", 8081, "loopback HTTP port")
-	if err := flags.Parse(args); err != nil { return err }
-	if flags.NArg() != 0 { return errors.New("unexpected arguments") }
-	if *port < 1 || *port > 65535 { return errors.New("port must be between 1 and 65535") }
-	addr := fmt.Sprintf("127.0.0.1:%d", *port)
-	db, err := store.Open(*dir)
+	cfg, err := config.Parse(args, os.LookupEnv)
+	if err != nil { return err }
+	db, err := store.Open(cfg.DataDir)
 	if err != nil { return err }
 	defer db.Close()
 	var count int
 	if err := db.QueryRow("SELECT count(*) FROM users").Scan(&count); err != nil { return err }
 	if count == 0 { return errors.New("owner not initialized; run owner init") }
 	if _, err := db.Exec("DELETE FROM sessions WHERE expires_at <= ?", time.Now().Unix()); err != nil { return err }
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		fmt.Fprint(w, "ok\n")
-	})
-	keyCipher, err := auth.LoadKeyCipher(*dir, db)
+	keyCipher, err := auth.LoadKeyCipher(cfg.DataDir, db)
 	if err != nil { return err }
-	app, err := web.New(db, keyCipher)
+	app, err := web.New(db, keyCipher, cfg.PanelOrigin)
 	if err != nil { return err }
-	app.Host = addr
-	mux.Handle("/mcp", mcpserver.New(db))
-	mux.Handle("/", app)
+	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, app, mcpserver.New(db, cfg.MCPOrigin))
 
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { if r.Host != addr { http.Error(w,"Forbidden",http.StatusForbidden); return }; mux.ServeHTTP(w,r) }),
+		Addr:              cfg.Listen,
+		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
@@ -82,20 +71,15 @@ func run() error {
 }
 
 func owner(args []string) error {
-	if len(args) == 0 || (args[0] != "init" && args[0] != "reset-password") { return errors.New("usage: owner init|reset-password") }
-	command := args[0]
-	flags := flag.NewFlagSet("owner "+command, flag.ContinueOnError)
-	dir := flags.String("data-dir", "./data", "data directory")
-	login := flags.String("login", "", "owner login")
-	if err := flags.Parse(args[1:]); err != nil { return err }
-	if flags.NArg() != 0 || (command == "reset-password" && *login != "") { return errors.New("unexpected arguments") }
-	if command == "init" { if _, err := auth.Login(*login); err != nil { return err } }
+	command, dir, login, err := config.ParseOwner(args, os.LookupEnv)
+	if err != nil { return err }
+	if command == "init" { if _, err := auth.Login(login); err != nil { return err } }
 	password, err := auth.ReadPassword(os.Stdin)
 	if err != nil { return err }
-	db, err := store.Open(*dir)
+	db, err := store.Open(dir)
 	if err != nil { return err }
 	defer db.Close()
-	if command == "init" { err = auth.Init(db, *login, password) } else { err = auth.Reset(db, password) }
+	if command == "init" { err = auth.Init(db, login, password) } else { err = auth.Reset(db, password) }
 	if err != nil { return err }
 	fmt.Println("Owner credentials updated")
 	return nil

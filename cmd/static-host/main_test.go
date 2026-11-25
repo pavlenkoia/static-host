@@ -15,6 +15,7 @@ import (
 )
 
 func TestCLIHTTPAndLifecycle(t *testing.T) {
+	for _, key := range []string{"STATIC_HOST_LISTEN", "STATIC_HOST_DATA_DIR", "STATIC_HOST_BASE_DOMAIN"} { t.Setenv(key, ""); os.Unsetenv(key) }
 	temp := t.TempDir()
 	binary := filepath.Join(temp, "static-host")
 	build := exec.Command("go", "build", "-o", binary, ".")
@@ -26,13 +27,13 @@ func TestCLIHTTPAndLifecycle(t *testing.T) {
 	if err := os.Mkdir(dataDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	uninitialized := exec.Command(binary, "-data-dir", dataDir, "-port", "8081")
+	uninitialized := exec.Command(binary, "-data-dir", dataDir, "-listen", "127.0.0.1:8081")
 	if output, err := uninitialized.CombinedOutput(); err == nil || !strings.Contains(string(output), "owner not initialized") {
 		t.Fatalf("uninitialized owner: err=%v output=%s", err, output)
 	}
 	for _, port := range []string{"0", "65536"} {
-		cmd := exec.Command(binary, "-data-dir", dataDir, "-port", port)
-		if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "port must be between 1 and 65535") {
+		cmd := exec.Command(binary, "-data-dir", dataDir, "-listen", "127.0.0.1:"+port)
+		if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "invalid port") {
 			t.Fatalf("invalid port %s: err=%v output=%s", port, err, output)
 		}
 	}
@@ -52,7 +53,7 @@ func TestCLIHTTPAndLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
-	cmd := exec.Command(binary, "-data-dir", dataDir, "-port", strconv.Itoa(port))
+	cmd := exec.Command(binary, "-data-dir", dataDir, "-listen", addr)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
