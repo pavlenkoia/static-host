@@ -1,5 +1,9 @@
 # Log
 
+- 2026-11-25T19:03:20Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T18:56:21Z — update: notes/infrastructure-and-workflow.md
+
 - 2026-11-25T18:24:09Z — update: index.md
 
 - 2026-11-25T18:24:09Z — update: notes/product-and-publication.md

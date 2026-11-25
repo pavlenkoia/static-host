@@ -78,6 +78,10 @@ func TestConfiguredOrigin(t *testing.T) {
  for _,tc:=range []struct{origin string; want int}{{"http://127.0.0.1:23456",401},{"http://127.0.0.1:8080",403},{"http://127.0.0.1:5173",403},{"",403}} {
   r:=httptest.NewRequest("POST","http://127.0.0.1:23456/api/keys/id/reveal",nil);r.Header.Set("Origin",tc.origin);w:=httptest.NewRecorder();s.ServeHTTP(w,r);if w.Code!=tc.want {t.Fatalf("origin=%s: %d, want %d",tc.origin,w.Code,tc.want)}
  }
+ s,err=New(db,testCipher(t),"http://192.0.2.10:8081","long-password-one",s.Publications); if err!=nil {t.Fatal(err)}
+ for _,tc:=range []struct{origin string; want int}{{"http://192.0.2.10:8081",401},{"http://192.0.2.11:8081",403},{"http://192.0.2.10:8082",403}} {
+  r:=httptest.NewRequest("POST","http://192.0.2.10:8081/api/keys/id/reveal",nil); r.Header.Set("Origin",tc.origin); w:=httptest.NewRecorder(); s.ServeHTTP(w,r); if w.Code!=tc.want {t.Fatalf("origin=%s: %d, want %d",tc.origin,w.Code,tc.want)}
+ }
 }
 
 func TestSessionExpirationBoundary(t *testing.T) {
