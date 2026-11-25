@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T14:15:41Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T14:15:40Z — update: sources/pr-only-checks.md
+
+- 2026-11-25T14:15:21Z — ingest: pr-only-checks (raw/static-host-pr-only-checks.md)
+
 - 2026-11-25T14:08:45Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T14:08:45Z — update: sources/manual-image-release.md
