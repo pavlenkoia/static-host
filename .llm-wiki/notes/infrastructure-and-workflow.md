@@ -4,7 +4,7 @@ title: Инфраструктура и рабочий процесс
 description: Uncloud, предложенный стек, наблюдения и правила сопровождения документации.
 sources: [raw/2026-11-25-infrastructure.md]
 tags: [uncloud, infrastructure, workflow, documentation]
-timestamp: 2026-11-25T13:38:47Z
+timestamp: 2026-11-25T14:02:52Z
 ---
 
 # Инфраструктура и рабочий процесс
@@ -22,7 +22,7 @@ timestamp: 2026-11-25T13:38:47Z
 
 Документация — docs/architecture.md; правила — корневой AGENTS.md. Локальная wiki — стандартная .llm-wiki/. Начинать запрос знаний с index.md, затем секционных индексов. Raw-снимки неизменяемы; новые источники импортировать через okf ingest, изменения записывать через okf update с timeline и log. Подключение инструкций выполнено через okf wire --agent codex. Основание исправления: [стандартное подключение OKF](/sources/agent-workflow-correction.md). Wiki не является вторым независимым архитектурным контрактом.
 
-Тесты обязательны: до завершения каждого изменения выполнить `make check-fast` (сборка Vue и Go-тесты с race detector без кэша); для изменений интерфейса дополнительно выполнить полный `make check` с Playwright на настоящем Go-сервере с временной БД. GitHub Actions запускает быстрый gate на push/PR, полный — вручную; для блокировки merge отдельно требуется обязательный статус Required checks в защите ветки. Подробнее — [обязательные проверки](/sources/development-checks.md). Изменения production/DNS и разрушительные действия требуют разрешения. Проверка документации: `okf index .llm-wiki`, затем `okf lint .llm-wiki --strict-frontmatter`.
+Тесты обязательны: до завершения каждого изменения выполнить `make check-fast` (сборка Vue и Go-тесты с race detector без кэша); для изменений интерфейса дополнительно выполнить полный `make check` с Playwright на настоящем Go-сервере с временной БД. GitHub Actions запускает только быстрый gate на push/PR; браузерные проверки остаются локальными, workflow Browser checks удалён по [решению пользователя](/sources/no-browser-ci.md). Админка не считается главным или критичным компонентом. Для блокировки merge отдельно требуется обязательный статус Required checks в защите ветки. Подробнее — [обязательные проверки](/sources/development-checks.md). Изменения production/DNS и разрушительные действия требуют разрешения. Проверка документации: `okf index .llm-wiki`, затем `okf lint .llm-wiki --strict-frontmatter`.
 
 Основание: [начальные решения](/sources/project-decisions.md). Связанные страницы: [модель продукта](/notes/product-and-publication.md), [домены](/notes/domains-and-security.md).
 
@@ -80,3 +80,7 @@ timestamp: 2026-11-25T13:38:47Z
 - time: 2026-11-25T13:38:47Z
   kind: decision
   summary: "Добавлена инфраструктура образа и Compose без развёртывания"
+
+- time: 2026-11-25T14:02:52Z
+  kind: decision
+  summary: "Браузерные тесты только локально; CI ориентирован на сборку и выпуск образа"

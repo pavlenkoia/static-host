@@ -8,6 +8,7 @@ timestamp: 2026-11-25T07:22:07Z
 
 <!-- okf:auto-index -->
 
+- [Браузерные тесты только локально](/sources/no-browser-ci.md)
 - [Динамические домены и размещение сервиса](/sources/dynamic-domains.md)
 - [Контейнерная упаковка и выпуск](/sources/container-release.md)
 - [Локальный кабинет и MCP](/sources/local-owner-mcp.md)

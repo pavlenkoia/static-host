@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T14:02:52Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T14:02:52Z — update: sources/no-browser-ci.md
+
+- 2026-11-25T14:02:34Z — ingest: no-browser-ci (raw/static-host-no-browser-ci.md)
+
 - 2026-11-25T13:38:47Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T13:38:47Z — update: sources/container-release.md
