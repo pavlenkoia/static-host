@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-25T13:38:47Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-25T13:38:47Z — update: sources/container-release.md
+
+- 2026-11-25T13:38:07Z — ingest: container-release (raw/README.md)
+
 - 2026-11-25T13:18:44Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T13:18:43Z — update: sources/development-checks.md

@@ -1,0 +1,25 @@
+services:
+  static-host:
+    image: ${STATIC_HOST_IMAGE:?Set STATIC_HOST_IMAGE to a GHCR image reference}
+    environment:
+      STATIC_HOST_LISTEN: 0.0.0.0:8081
+      STATIC_HOST_DATA_DIR: /data
+      STATIC_HOST_BASE_DOMAIN: ${STATIC_HOST_BASE_DOMAIN:?Set STATIC_HOST_BASE_DOMAIN}
+    x-machines:
+      - ${STATIC_HOST_MACHINE:?Set STATIC_HOST_MACHINE}
+    x-caddy: |
+      panel.${STATIC_HOST_BASE_DOMAIN} {
+        reverse_proxy {{upstreams 8081}}
+      }
+      mcp.${STATIC_HOST_BASE_DOMAIN} {
+        reverse_proxy {{upstreams 8081}}
+      }
+    volumes:
+      - type: bind
+        source: ${STATIC_HOST_DATA_PATH:?Set STATIC_HOST_DATA_PATH to an absolute directory}
+        target: /data
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+    stop_grace_period: 10s
