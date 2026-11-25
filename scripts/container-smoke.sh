@@ -85,6 +85,23 @@ status=$(curl --noproxy '*' -sS -o "$tmp/key" -w '%{http_code}' -X POST \
 token=$(jq -er '.token' "$tmp/key")
 key_id=$(jq -er '.key.id' "$tmp/key")
 [[ -n $token && -n $key_id ]]
+printf '%s' '<h1>container fixture</h1>' > "$tmp/index.html"
+tar -czf "$tmp/site.tar.gz" -C "$tmp" index.html
+mcp_call() {
+  curl --noproxy '*' -fsS -H 'Host: mcp.example.test' -H "Authorization: Bearer $token" \
+    -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+    -H 'MCP-Protocol-Version: 2025-11-25' --data "$1" "$url/mcp"
+}
+mcp_call '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sites_create","arguments":{"name":"container site"}}}' > "$tmp/site.json"
+site_id=$(jq -er '.result.structuredContent.site.id' "$tmp/site.json")
+mcp_call "$(jq -cn --arg id "$site_id" '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:"uploads_create",arguments:{site_id:$id,format:"tar.gz",expected_generation:0}}}')" > "$tmp/grant.json"
+upload_id=$(jq -er '.result.structuredContent.upload_id' "$tmp/grant.json")
+capability=$(jq -er '.result.structuredContent.upload_url | split("?")[1]' "$tmp/grant.json")
+curl --noproxy '*' -fsS -X PUT -H 'Host: upload.example.test' -H "Authorization: Bearer $token" \
+  -H 'Content-Type: application/gzip' --data-binary @"$tmp/site.tar.gz" "$url/uploads/$upload_id?$capability" > /dev/null
+mcp_call "$(jq -cn --arg site "$site_id" --arg upload "$upload_id" '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:"sites_publish",arguments:{site_id:$site,upload_id:$upload,expected_generation:0,idempotency_key:"container-publish"}}}')" > "$tmp/published.json"
+[[ $(jq -r '.result.structuredContent.site.generation' "$tmp/published.json") == 1 ]]
+[[ $(curl --noproxy '*' -fsS -H "Host: $site_id.sites.example.test" "$url/") == '<h1>container fixture</h1>' ]]
 [[ $(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.test' "$url/") == 403 ]]
 [[ $(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' -X POST -H 'Host: mcp.example.test' "$url/mcp") == 401 ]]
 stop
@@ -102,6 +119,7 @@ status=$(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' \
 login "$new_password"
 cookie=$(grep -i '^set-cookie:' "$tmp/headers" | sed -E 's/^[^:]+: *([^;]+).*/\1/' | tr -d '\r')
 csrf=$(jq -r '.csrf_token' "$tmp/login")
+[[ $(curl --noproxy '*' -fsS -H "Host: $site_id.sites.example.test" "$url/") == '<h1>container fixture</h1>' ]]
 status=$(curl --noproxy '*' -sS -o "$tmp/revealed" -w '%{http_code}' -X POST \
   -H 'Host: panel.example.test' -H 'Origin: https://panel.example.test' \
   -H "Cookie: $cookie" -H "X-CSRF-Token: $csrf" "$url/api/keys/$key_id/reveal")

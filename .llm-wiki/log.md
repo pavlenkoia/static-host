@@ -1,5 +1,9 @@
 # Log
 
+- 2026-11-25T18:24:09Z — update: index.md
+
+- 2026-11-25T18:24:09Z — update: notes/product-and-publication.md
+
 - 2026-11-25T14:59:36Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-25T14:59:35Z — update: sources/first-deploy.md

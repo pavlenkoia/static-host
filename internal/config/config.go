@@ -9,7 +9,7 @@ import (
  "strings"
 )
 
-type Config struct { Listen, DataDir, BaseDomain, PanelOrigin, MCPOrigin, AdminPassword string }
+type Config struct { Listen, DataDir, BaseDomain, PanelOrigin, MCPOrigin, UploadOrigin, SiteSuffix, AdminPassword string }
 func value(env func(string)(string,bool), key, fallback string) string { if v,ok:=env(key); ok { return v }; return fallback }
 func Parse(args []string, env func(string)(string,bool)) (Config,error) {
  var c Config
@@ -24,8 +24,8 @@ func Parse(args []string, env func(string)(string,bool)) (Config,error) {
  ip:=net.ParseIP(host); if ip==nil {return c,errors.New("listen host must be a numeric IP")}; if port=="" {return c,errors.New("invalid port")}; for _,ch:=range port {if ch<'0'||ch>'9'{return c,errors.New("invalid port")}}; p,err:=strconv.Atoi(port); if err!=nil||p<1||p>65535{return c,errors.New("invalid port")}
  for _, ch := range c.BaseDomain { if ch > 127 { return c, errors.New("invalid base domain") } }
  c.BaseDomain=strings.ToLower(c.BaseDomain)
- if c.BaseDomain=="" {if !ip.IsLoopback(){return c,errors.New("local mode requires loopback IP")}; c.PanelOrigin="http://"+c.Listen; c.MCPOrigin=c.PanelOrigin; return c,nil}
- if len(c.BaseDomain)+len("panel.")>253 || net.ParseIP(c.BaseDomain)!=nil {return c,errors.New("invalid base domain")}
+ if c.BaseDomain=="" {if !ip.IsLoopback(){return c,errors.New("local mode requires loopback IP")}; c.PanelOrigin="http://"+c.Listen; c.MCPOrigin=c.PanelOrigin; c.UploadOrigin=c.PanelOrigin; c.SiteSuffix=net.JoinHostPort("localhost",port); return c,nil}
+ if len(c.BaseDomain)+len("s-")+32+len(".sites.")>253 || net.ParseIP(c.BaseDomain)!=nil {return c,errors.New("invalid base domain")}
  labels:=strings.Split(c.BaseDomain,"."); if len(labels)<2{return c,errors.New("invalid base domain")}; for _,label:=range labels {if len(label)<1||len(label)>63||label[0]=='-'||label[len(label)-1]=='-' {return c,errors.New("invalid base domain")}; for _,ch:=range label {if !(ch>='a'&&ch<='z'||ch>='0'&&ch<='9'||ch=='-'){return c,errors.New("invalid base domain")}}}
- c.PanelOrigin="https://panel."+c.BaseDomain; c.MCPOrigin="https://mcp."+c.BaseDomain; return c,nil
+ c.PanelOrigin="https://panel."+c.BaseDomain; c.MCPOrigin="https://mcp."+c.BaseDomain; c.UploadOrigin="https://upload."+c.BaseDomain; c.SiteSuffix="sites."+c.BaseDomain; return c,nil
 }

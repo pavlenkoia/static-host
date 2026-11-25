@@ -1,1 +1,2 @@
 export type AgentKey = { id: string; name: string; created_at: number; expires_at: number|null; revoked_at: number|null; status: 'active'|'expired'|'revoked'; can_reveal: boolean }
+export type Site = { id:string; name:string; url:string; status:'draft'|'published'; generation:number; size_bytes:number; file_count:number; created_at:number; updated_at:number; upload:{id:string;state:string;expires_at:number;error_code:string|null}|null }

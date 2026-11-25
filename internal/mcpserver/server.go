@@ -10,13 +10,15 @@ import (
  "unicode"
 
  "github.com/modelcontextprotocol/go-sdk/mcp"
+ "static-host/internal/publication"
  "static-host/internal/web"
 )
 
 type identityKey struct{}
 type Identity struct { OwnerID int64; KeyID string }
-func New(db *sql.DB, origin string) http.Handler {
+func New(db *sql.DB, origin string, publications *publication.Service) http.Handler {
  server:=mcp.NewServer(&mcp.Implementation{Name:"static-host",Version:"0.1.0"},nil)
+ registerPublicationTools(server,publications)
  // The outer HTTP router validates Host against the configured public authority.
  handler:=mcp.NewStreamableHTTPHandler(func(*http.Request)*mcp.Server{return server},&mcp.StreamableHTTPOptions{Stateless:true,JSONResponse:true,MaxRequestBodyBytes:1<<20,DisableLocalhostProtection:true})
  return http.HandlerFunc(func(w http.ResponseWriter,r *http.Request) {

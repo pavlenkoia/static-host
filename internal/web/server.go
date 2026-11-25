@@ -18,14 +18,15 @@ import (
  "sync"
  "time"
 
+ "static-host/internal/publication"
  "static-host/internal/auth"
 )
 
 //go:embed dist
 var assets embed.FS
 
-type Server struct { DB *sql.DB; KeyCipher cipher.AEAD; Origin string; cookieName string; secureCookie bool; Now func() time.Time; mu sync.Mutex; failures []time.Time; passwordHash string }
-func New(db *sql.DB, keyCipher cipher.AEAD, origin, password string) (*Server,error) { if keyCipher==nil { return nil,errors.New("nil key cipher") }; if origin=="" {return nil,errors.New("empty origin")}; if !auth.ValidPassword(password) { return nil, errors.New("STATIC_HOST_ADMIN_PASSWORD must be 12–72 bytes") }; hash,err:=auth.Hash(password); if err!=nil {return nil,err}; secure:=strings.HasPrefix(origin,"https://"); name:="static_host_session"; if secure {name="__Host-static_host_session"}; return &Server{DB:db,KeyCipher:keyCipher,Origin:origin,cookieName:name,secureCookie:secure,Now:time.Now,passwordHash:hash},nil }
+type Server struct { DB *sql.DB; KeyCipher cipher.AEAD; Publications *publication.Service; Origin string; cookieName string; secureCookie bool; Now func() time.Time; mu sync.Mutex; failures []time.Time; passwordHash string }
+func New(db *sql.DB, keyCipher cipher.AEAD, origin, password string, publications *publication.Service) (*Server,error) { if keyCipher==nil { return nil,errors.New("nil key cipher") }; if publications==nil {return nil,errors.New("nil publication service")}; if origin=="" {return nil,errors.New("empty origin")}; if !auth.ValidPassword(password) { return nil, errors.New("STATIC_HOST_ADMIN_PASSWORD must be 12–72 bytes") }; hash,err:=auth.Hash(password); if err!=nil {return nil,err}; secure:=strings.HasPrefix(origin,"https://"); name:="static_host_session"; if secure {name="__Host-static_host_session"}; return &Server{DB:db,KeyCipher:keyCipher,Publications:publications,Origin:origin,cookieName:name,secureCookie:secure,Now:time.Now,passwordHash:hash},nil }
 func fmtSeconds(d time.Duration) string { return strconv.FormatInt(int64((d+time.Second-1)/time.Second),10) }
 func random(n int) (string,error) { b:=make([]byte,n); if _,err:=rand.Read(b); err!=nil{return "",err}; return base64.RawURLEncoding.EncodeToString(b),nil }
 func digest(s string) []byte { h:=sha256.Sum256([]byte(s)); return h[:] }
@@ -49,7 +50,7 @@ func (s *Server) api(w http.ResponseWriter,r *http.Request) {
  case "/api/session": if r.Method!="GET" { jsonError(w,405,"method_not_allowed"); return }; if v,ok:=s.require(w,r,false); ok { jsonReply(w,200,v) }
  case "/api/login": if r.Method!="POST" { jsonError(w,405,"method_not_allowed"); return }; s.login(w,r)
  case "/api/logout": if r.Method!="POST" { jsonError(w,405,"method_not_allowed"); return }; if !emptyBody(w,r) { return }; v,err:=s.session(r); if err!=nil && !errors.Is(err,sql.ErrNoRows) { jsonError(w,503,"service_unavailable"); return }; if err==nil { if subtle.ConstantTimeCompare([]byte(v.CSRF),[]byte(r.Header.Get("X-CSRF-Token")))!=1 { jsonError(w,403,"forbidden"); return }; c,_:=r.Cookie(s.cookieName); if _,err=s.DB.Exec("DELETE FROM sessions WHERE token_hash=?",digest(c.Value)); err!=nil { jsonError(w,503,"service_unavailable"); return } }; http.SetCookie(w,&http.Cookie{Name:s.cookieName,Path:"/",Secure:s.secureCookie,HttpOnly:true,SameSite:http.SameSiteStrictMode,MaxAge:-1}); w.WriteHeader(204)
- default: if r.URL.Path=="/api/keys" || strings.HasPrefix(r.URL.Path,"/api/keys/") { s.keys(w,r) } else { jsonError(w,404,"not_found") }
+ default: if r.URL.Path=="/api/keys" || strings.HasPrefix(r.URL.Path,"/api/keys/") { s.keys(w,r) } else if r.URL.Path=="/api/sites" || strings.HasPrefix(r.URL.Path,"/api/sites/") {s.sites(w,r)} else { jsonError(w,404,"not_found") }
  }
 }
 func (s *Server) login(w http.ResponseWriter,r *http.Request) {

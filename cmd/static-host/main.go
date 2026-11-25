@@ -14,6 +14,7 @@ import (
 	"static-host/internal/config"
 	"static-host/internal/httpserver"
 	"static-host/internal/mcpserver"
+	"static-host/internal/publication"
 	"static-host/internal/store"
 	"static-host/internal/web"
 )
@@ -28,9 +29,16 @@ func run() error {
 	if _, err := db.Exec("DELETE FROM sessions"); err != nil { return err }
 	keyCipher, err := auth.LoadKeyCipher(cfg.DataDir, db)
 	if err != nil { return err }
-	app, err := web.New(db, keyCipher, cfg.PanelOrigin, cfg.AdminPassword)
+	publications, err := publication.New(db, cfg.DataDir, publication.Options{UploadOrigin:cfg.UploadOrigin, SiteSuffix:cfg.SiteSuffix, Local:cfg.BaseDomain==""})
 	if err != nil { return err }
-	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, app, mcpserver.New(db, cfg.MCPOrigin))
+	defer publications.Close()
+	app, err := web.New(db, keyCipher, cfg.PanelOrigin, cfg.AdminPassword, publications)
+	if err != nil { return err }
+	upload := publications.UploadHandler(func(token string)(publication.Identity,error) {
+		id, owner, err := web.AuthenticateKey(db, token, time.Now().Unix())
+		return publication.Identity{OwnerID:owner,KeyID:id},err
+	})
+	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, cfg.UploadOrigin, cfg.SiteSuffix, app, mcpserver.New(db, cfg.MCPOrigin, publications), upload, publications.SiteHandler())
 
 	server := &http.Server{
 		Addr:              cfg.Listen,

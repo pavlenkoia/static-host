@@ -7,7 +7,7 @@ services:
     x-machines:
       - ${STATIC_HOST_MACHINE}
     x-caddy: |
-      panel.${STATIC_HOST_BASE_DOMAIN}, mcp.${STATIC_HOST_BASE_DOMAIN} {
+      panel.${STATIC_HOST_BASE_DOMAIN}, mcp.${STATIC_HOST_BASE_DOMAIN}, upload.${STATIC_HOST_BASE_DOMAIN} {
         reverse_proxy {{upstreams 8081}}
       }
     volumes:

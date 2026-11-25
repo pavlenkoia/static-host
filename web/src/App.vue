@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted,onBeforeUnmount,ref,watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { AgentKey } from './components/types'
+import type { AgentKey, Site } from './components/types'
 import KeyList from './components/KeyList.vue'
+import SiteList from './components/SiteList.vue'
 import KeyCreateDialog from './components/KeyCreateDialog.vue'
 import UiButton from './components/ui/UiButton.vue'
 import UiField from './components/ui/UiField.vue'
@@ -15,9 +16,10 @@ const router=useRouter()
 const user=ref(''),csrf=ref(''),login=ref(''),password=ref(''),sessionError=ref(''),loginError=ref(''),listError=ref(''),dialogError=ref(''),notice=ref('')
 const sessionLoading=ref(true),listLoading=ref(false),loginBusy=ref(false),logoutBusy=ref(false),createBusy=ref(false),createOpen=ref(false),confirmBusy=ref(false)
 const keys=ref<AgentKey[]>([]),revealed=ref<Record<string,string>>({}),busy=ref<Record<string,boolean>>({}),confirmation=ref<{key:AgentKey;action:'revoke'|'delete'}|null>(null)
-let generation=0
+const sites=ref<Site[]>([]),siteError=ref(''),siteLoading=ref(false),siteDialogError=ref(''),siteDeleting=ref(false),siteConfirmation=ref<Site|null>(null)
+let generation=0,sessionGeneration=0
 function clearSecrets(){generation++;revealed.value={}}
-function clearSession(){clearSecrets();user.value='';csrf.value='';keys.value=[];createOpen.value=false;confirmation.value=null}
+function clearSession(){sessionGeneration++;clearSecrets();user.value='';csrf.value='';keys.value=[];sites.value=[];siteConfirmation.value=null;siteError.value='';siteDialogError.value='';createOpen.value=false;confirmation.value=null}
 function visibility(){if(document.hidden)clearSecrets()}
 watch(()=>router.currentRoute.value.path,clearSecrets)
 onMounted(()=>{document.addEventListener('visibilitychange',visibility);refresh()})
@@ -30,8 +32,9 @@ async function api(path:string,method='GET',body?:unknown){
 }
 const message=(e:unknown)=>e instanceof Error?e.message:'Ошибка сервиса'
 async function loadKeys(){listLoading.value=true;listError.value='';try{keys.value=(await api('/api/keys')).keys}catch(e){if(user.value)listError.value=message(e)}finally{listLoading.value=false}}
-async function refresh(){sessionLoading.value=true;sessionError.value='';try{const s=await api('/api/session');user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await loadKeys()}catch(e){if(!message(e).includes('(401)'))sessionError.value=message(e)}finally{sessionLoading.value=false}}
-async function signIn(){loginBusy.value=true;loginError.value='';try{const s=await api('/api/login','POST',{login:login.value,password:password.value});user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await loadKeys()}catch(e){loginError.value=message(e)}finally{password.value='';loginBusy.value=false}}
+async function loadSites(){const current=sessionGeneration;siteLoading.value=true;siteError.value='';try{const result=await api('/api/sites');if(current===sessionGeneration&&user.value)sites.value=result.sites}catch(e){if(current===sessionGeneration&&user.value)siteError.value=message(e)}finally{if(current===sessionGeneration)siteLoading.value=false}}
+async function refresh(){sessionLoading.value=true;sessionError.value='';try{const s=await api('/api/session');user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){if(!message(e).includes('(401)'))sessionError.value=message(e)}finally{sessionLoading.value=false}}
+async function signIn(){loginBusy.value=true;loginError.value='';try{const s=await api('/api/login','POST',{login:login.value,password:password.value});user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){loginError.value=message(e)}finally{password.value='';loginBusy.value=false}}
 async function signOut(){logoutBusy.value=true;try{await api('/api/logout','POST');clearSession();await router.replace('/login')}catch(e){listError.value=message(e)}finally{logoutBusy.value=false}}
 async function create(input:{name:string;expires_in_days:number|null}){createBusy.value=true;dialogError.value='';try{const result=await api('/api/keys','POST',input);keys.value=[result.key,...keys.value];createOpen.value=false;notice.value='Ключ создан'}catch(e){dialogError.value=message(e)}finally{createBusy.value=false}}
 function openCreate(){dialogError.value='';createOpen.value=true}
@@ -40,6 +43,8 @@ function hide(id:string){delete revealed.value[id];generation++}
 async function copy(id:string){if(!revealed.value[id])return reveal(id,false);try{await navigator.clipboard.writeText(revealed.value[id]);notice.value='Скопировано'}catch{listError.value='Не удалось скопировать. Скопируйте показанное значение вручную.'}}
 function confirmAction(key:AgentKey,action:'revoke'|'delete'){dialogError.value='';confirmation.value={key,action}}
 async function perform(){const c=confirmation.value;if(!c)return;confirmBusy.value=true;busy.value[c.key.id]=true;dialogError.value='';try{const path=`/api/keys/${encodeURIComponent(c.key.id)}`;await api(c.action==='revoke'?path+'/revoke':path,c.action==='revoke'?'POST':'DELETE');if(c.action==='delete'){keys.value=keys.value.filter(k=>k.id!==c.key.id);hide(c.key.id)}else{const k=keys.value.find(k=>k.id===c.key.id);if(k){k.status='revoked';k.revoked_at=Math.floor(Date.now()/1000)}}confirmation.value=null;notice.value=c.action==='delete'?'Ключ удалён':'Ключ отозван'}catch(e){dialogError.value=message(e)}finally{delete busy.value[c.key.id];confirmBusy.value=false}}
+function confirmSite(site:Site){siteDialogError.value='';siteConfirmation.value=site}
+async function deleteSite(){const site=siteConfirmation.value;if(!site)return;siteDeleting.value=true;siteDialogError.value='';try{await api(`/api/sites/${encodeURIComponent(site.id)}`,'DELETE');sites.value=sites.value.filter(s=>s.id!==site.id);siteConfirmation.value=null;notice.value='Сайт удалён'}catch(e){siteDialogError.value=message(e)}finally{siteDeleting.value=false}}
 </script>
 <template>
  <div v-if="sessionLoading" class="grid min-h-dvh place-items-center p-6">
@@ -64,6 +69,12 @@ async function perform(){const c=confirmation.value;if(!c)return;confirmBusy.val
    <div class="flex items-center gap-3 text-muted"><span class="hidden md:inline">{{ user }}</span><UiButton variant="ghost" :loading="logoutBusy" @click="signOut">Выйти</UiButton></div>
   </header>
   <main class="pt-8 pb-20 md:pt-12">
+   <section class="mb-12" aria-labelledby="sites-heading">
+    <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><h1 id="sites-heading" class="text-[28px] font-semibold tracking-tight">Сайты</h1><UiButton @click="loadSites">Обновить список</UiButton></div>
+    <UiNotice v-if="siteError" tone="error">{{ siteError }}<template #action><UiButton @click="loadSites">Повторить</UiButton></template></UiNotice>
+    <div v-if="siteLoading" aria-busy="true" class="grid gap-4 rounded-card border border-border bg-surface p-6"><span class="sr-only">Загрузка сайтов</span><UiSkeleton/><UiSkeleton shape="block"/></div>
+    <template v-else-if="!siteError || sites.length"><SiteList v-if="sites.length" :sites="sites" @delete="confirmSite"/><div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Сайтов пока нет" description="Создайте сайт через MCP."/></div></template>
+   </section>
    <div class="mb-8 grid gap-5 md:flex md:items-start md:justify-between md:gap-6">
     <div><h1 class="text-[28px] leading-9 font-semibold tracking-tight md:text-[32px] md:leading-10">Ключи агентов</h1><p class="mt-2 text-base leading-6 text-muted">Управляйте доступом агентов к вашему кабинету.</p></div>
     <UiButton class="w-full md:w-auto" variant="primary" @click="openCreate">Создать ключ</UiButton>
@@ -78,6 +89,10 @@ async function perform(){const c=confirmation.value;if(!c)return;confirmBusy.val
     </template>
    </div>
   </main>
+  <UiDialog :open="!!siteConfirmation" title="Удалить сайт?" description="Сайт и его содержимое будут удалены без возможности восстановления." :busy="siteDeleting" @close="siteConfirmation=null">
+   <p v-if="siteConfirmation"><strong>{{ siteConfirmation.name }}</strong><br>{{ siteConfirmation.url }}</p><UiNotice v-if="siteDialogError" tone="error">{{ siteDialogError }}</UiNotice>
+   <template #footer><UiButton :disabled="siteDeleting" @click="siteConfirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="siteDeleting" @click="deleteSite">Удалить</UiButton></template>
+  </UiDialog>
   <KeyCreateDialog :open="createOpen" :busy="createBusy" :error="dialogError" @close="createOpen=false" @submit="create"/>
   <UiDialog :open="!!confirmation" :title="confirmation?.action==='delete'?'Удалить ключ?':'Отозвать ключ?'" :description="confirmation?.action==='delete'?'Ключ будет удалён без возможности восстановления. Если он активен, агент сразу потеряет доступ.':'Доступ агента прекратится немедленно.'" :busy="confirmBusy" @close="confirmation=null">
    <p v-if="confirmation">Ключ: <strong>{{ confirmation.key.name }}</strong></p><UiNotice v-if="dialogError" tone="error">{{ dialogError }}</UiNotice>
