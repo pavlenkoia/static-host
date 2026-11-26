@@ -2,7 +2,10 @@
 
 ## Навигация
 
-- Проектная документация — `docs/`; архитектура и принятые решения — [docs/architecture.md](docs/architecture.md).
+- Вход в проектную документацию — [docs/README.md](docs/README.md); локальный запуск — [docs/getting-started.md](docs/getting-started.md).
+- Текущая архитектура и гарантии — [docs/architecture.md](docs/architecture.md); конфигурация — [docs/reference/configuration.md](docs/reference/configuration.md); MCP, публикация, лимиты и ошибки — [docs/reference/mcp.md](docs/reference/mcp.md).
+- Развёртывание — [docs/operations/deployment.md](docs/operations/deployment.md); эксплуатация, резервное копирование и диагностика — [docs/operations/maintenance.md](docs/operations/maintenance.md); карта кода и проверки — [docs/development.md](docs/development.md).
+- Нереализованные возможности и проектные решения для них — `docs/roadmap/`; датированные инфраструктурные наблюдения — `docs/history/`. Не выдавать планы за реализованные контракты, а исторические проверки — за актуальное состояние production.
 - Проектная память — `.llm-wiki/`. Для работы с ней использовать skill `llm-wiki-okf` и штатный CLI `okf`.
 
 ## Порядок работы
@@ -10,8 +13,8 @@
 1. Изучить релевантную документацию и актуальный код. При противоречии с запросом явно обозначить изменение решения.
 2. Выполнить минимальное законченное изменение, следуя существующим паттернам. Не включать несвязанную переработку.
 3. Проверить затронутые контракты, ошибки и граничные случаи. Команды сборки и тестов брать из конфигурации репозитория, не придумывать.
-4. Тесты обязательны при разработке: до завершения каждого изменения выполнить `make check-fast` (сборка интерфейса и Go-тесты с race detector); для изменений интерфейса дополнительно выполнить полный `make check` с браузерными E2E. Узкие проверки не заменяют соответствующий итоговый gate. Для изменения поведения обновить контрактные тесты; для исправления ошибки добавить regression test, если путь ещё не покрыт. Если окружение не позволяет выполнить gate, явно указать это: изменение не считается полностью проверенным.
-5. Обновить затронутую документацию и проектную память. В отчёте указать изменения, выполненные проверки и оставшиеся ограничения.
+4. Для изменений только документации (`README.md`, `AGENTS.md`, Markdown в `docs/` и проектная память `.llm-wiki/`) выполнить `make check-docs`; сборка приложения не требуется. Исключение не распространяется на код, конфигурацию, Makefile и скрипты проверок. Для остальных изменений выполнить `make check-fast` (сборка интерфейса и Go-тесты с race detector); для изменений интерфейса дополнительно выполнить полный `make check` с браузерными E2E. При одновременных изменениях документации выполнить также `make check-docs`. Узкие проверки не заменяют соответствующий итоговый gate. Для изменения поведения обновить контрактные тесты; для исправления ошибки добавить regression test, если путь ещё не покрыт. Если окружение не позволяет выполнить gate, явно указать это: изменение не считается полностью проверенным.
+5. Обновить затронутую тематическую документацию и проектную память. При добавлении или переносе страниц обновить [docs/README.md](docs/README.md), ссылки из корневого README и навигацию этого файла, если она затронута. Текущие контракты сверять с кодом и конфигурацией; планы сохранять в `docs/roadmap/`, исторические свидетельства — в `docs/history/`. Wiki не является вторым независимым контрактом. Проверить локальные ссылки; для изменений памяти выполнить `okf lint .llm-wiki --strict-frontmatter`. В отчёте указать изменения, выполненные проверки и оставшиеся ограничения.
 
 ## Ограничения действий
 
@@ -23,6 +26,6 @@
 <!-- BEGIN okf -->
 ## Project Memory (llm-wiki-okf)
 
-This project uses `llm-wiki-okf` for persistent knowledge. Consult `.llm-wiki/index.md` before answering questions about project architecture, design decisions, entities, or domain concepts. See skills/llm-wiki-okf/SKILL.md for the full protocol.
+This project uses `llm-wiki-okf` for persistent knowledge. Consult `.llm-wiki/index.md` before answering questions about project architecture, design decisions, entities, or domain concepts. Load the `llm-wiki-okf` skill through the agent environment for the full protocol (in omp: `skill://llm-wiki-okf`); do not assume a repository-relative skill installation.
 <!-- END okf -->
 

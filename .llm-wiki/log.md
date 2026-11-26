@@ -1,5 +1,21 @@
 # Log
 
+- 2026-11-26T06:48:01Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-26T06:48:01Z — update: sources/docs-only-gate.md
+
+- 2026-11-26T06:47:22Z — ingest: docs-only-gate (raw/static-host-docs-only-gate.md)
+
+- 2026-11-26T06:39:10Z — update: sources/documentation-structure.md
+
+- 2026-11-26T06:37:40Z — update: index.md
+
+- 2026-11-26T06:37:40Z — update: notes/infrastructure-and-workflow.md
+
+- 2026-11-26T06:37:40Z — update: sources/documentation-structure.md
+
+- 2026-11-26T06:36:52Z — ingest: documentation-structure (raw/README.md)
+
 - 2026-11-25T20:05:47Z — update: notes/product-and-publication.md
 
 - 2026-11-25T20:05:47Z — update: notes/domains-and-security.md

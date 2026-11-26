@@ -1,4 +1,4 @@
-.PHONY: dev check check-fast
+.PHONY: dev check check-fast check-docs
 
 dev:
 	@set -eu; \
@@ -8,7 +8,7 @@ dev:
 	npm --prefix web run build; \
 	exec go run ./cmd/static-host --base-domain ''
 
-# Full local gate; CI runs the faster subset on every push and pull request.
+# Full local gate; CI runs the faster subset on pull requests.
 check: check-fast
 	npm --prefix web exec -- playwright install chromium
 	npm --prefix web test
@@ -17,3 +17,7 @@ check-fast:
 	npm --prefix web ci
 	npm --prefix web run build
 	go test -race -count=1 ./...
+
+check-docs:
+	python3 scripts/check-docs.py
+	okf lint .llm-wiki --strict-frontmatter

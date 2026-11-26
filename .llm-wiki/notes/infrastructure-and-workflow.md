@@ -4,7 +4,7 @@ title: Инфраструктура и рабочий процесс
 description: Uncloud, предложенный стек, наблюдения и правила сопровождения документации.
 sources: [raw/2026-11-25-infrastructure.md]
 tags: [uncloud, infrastructure, workflow, documentation]
-timestamp: 2026-11-25T19:03:20Z
+timestamp: 2026-11-26T06:48:01Z
 ---
 
 # Инфраструктура и рабочий процесс
@@ -22,9 +22,9 @@ timestamp: 2026-11-25T19:03:20Z
 
 Подготовлены [контейнер, Compose и workflow выпуска](/sources/container-release.md): одна реплика с постоянными данными, явные panel/mcp маршруты и smoke до публикации в GHCR. По [решению о ручном выпуске](/sources/manual-image-release.md) Container image запускается только через workflow_dispatch из main, без автоматической сборки на push/PR; перед публикацией выполняются быстрые проверки и smoke. [Первое развёртывание](/sources/first-deploy.md) подтвердило healthy-сервис, публичный образ, доверенный HTTPS, вход владельца и MCP initialize; публикация сайтов пока не реализована.
 
-Документация — docs/architecture.md; правила — корневой AGENTS.md. Локальная wiki — стандартная .llm-wiki/. Начинать запрос знаний с index.md, затем секционных индексов. Raw-снимки неизменяемы; новые источники импортировать через okf ingest, изменения записывать через okf update с timeline и log. Подключение инструкций выполнено через okf wire --agent codex. Основание исправления: [стандартное подключение OKF](/sources/agent-workflow-correction.md). Wiki не является вторым независимым архитектурным контрактом.
+Вход в документацию — `docs/README.md`, текущая архитектура — `docs/architecture.md`; справочники, инструкции, планы и исторические проверки разделены по [структуре документации](/sources/documentation-structure.md). Правила — корневой AGENTS.md. Локальная wiki — стандартная .llm-wiki/. Начинать запрос знаний с index.md, затем секционных индексов. Raw-снимки неизменяемы; новые источники импортировать через okf ingest, изменения записывать через okf update с timeline и log. Подключение инструкций выполнено через okf wire --agent codex. Основание исправления: [стандартное подключение OKF](/sources/agent-workflow-correction.md). Wiki не является вторым независимым архитектурным контрактом.
 
-Тесты обязательны: до завершения каждого изменения выполнить `make check-fast` (сборка Vue и Go-тесты с race detector без кэша); для изменений интерфейса дополнительно выполнить полный `make check` с Playwright на настоящем Go-сервере с временной БД. По [решению о проверках PR](/sources/pr-only-checks.md) workflow Checks запускает быстрый gate только на pull_request, не на push; ручной выпуск образа также выполняет быстрый gate. Браузерные проверки остаются локальными, workflow Browser checks удалён по [решению пользователя](/sources/no-browser-ci.md). Админка не считается главным или критичным компонентом. Для блокировки merge отдельно требуется обязательный статус Required checks в защите ветки. Подробнее — [обязательные проверки](/sources/development-checks.md). Изменения production/DNS и разрушительные действия требуют разрешения. Проверка документации: `okf index .llm-wiki`, затем `okf lint .llm-wiki --strict-frontmatter`.
+Для изменений только документации действует [отдельный gate](/sources/docs-only-gate.md) `make check-docs`: ссылки и структура Markdown плюс строгий OKF lint без сборки приложения. Для кода, конфигурации, Makefile и скриптов проверок обязателен `make check-fast` (сборка Vue и Go race-тесты без кэша); для UI дополнительно `make check` с Playwright. При смешанных изменениях выполняются оба применимых gates. По [решению о проверках PR](/sources/pr-only-checks.md) Checks запускает `make check-fast` только на pull_request; ручной выпуск также выполняет быстрый gate. Браузерные проверки остаются локальными по [решению пользователя](/sources/no-browser-ci.md). Для блокировки merge отдельно требуется обязательный статус Required checks в защите ветки. Подробнее — [исходная политика проверок](/sources/development-checks.md). Изменения production/DNS и разрушительные действия требуют разрешения.
 
 Основание: [начальные решения](/sources/project-decisions.md). Связанные страницы: [модель продукта](/notes/product-and-publication.md), [домены](/notes/domains-and-security.md).
 
@@ -110,3 +110,11 @@ timestamp: 2026-11-25T19:03:20Z
 - time: 2026-11-25T19:03:20Z
   kind: decision
   summary: "Добавлен явный доверенный локальный origin для доступа из сети"
+
+- time: 2026-11-26T06:37:40Z
+  kind: note
+  summary: "Добавлены вход в документацию и ссылка на её тематическую структуру"
+
+- time: 2026-11-26T06:48:01Z
+  kind: decision
+  summary: "Для документации введён check-docs; для кода и инструментов сохранены прежние gates"
