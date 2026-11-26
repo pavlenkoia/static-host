@@ -2,7 +2,7 @@
 
 Публикация готовых статических сайтов через MCP: агент передаёт полный архив HTML/CSS/JS, сервис атомарно заменяет файлы и возвращает URL. Пользовательский код на сервере не выполняется.
 
-Реализованы кабинет одного владельца, ключи агентов, ZIP/tar.gz upload и системные адреса. Собственные домены, multi-user, SPA fallback, история содержимого и rollback не поддерживаются.
+Реализованы кабинет одного владельца, ключи агентов, ZIP/tar.gz upload, системные адреса и собственные домены при настройке ingress. Multi-user, SPA fallback, история содержимого и rollback не поддерживаются.
 
 ## Быстрый запуск
 
@@ -26,6 +26,6 @@ make dev
 - [Архитектура и гарантии](docs/architecture.md).
 - [Развёртывание в Uncloud](docs/operations/deployment.md) и [эксплуатация, backup, диагностика](docs/operations/maintenance.md).
 - [Разработка и проверки](docs/development.md).
-- [Планы собственных доменов](docs/roadmap/custom-domains.md) и [история инфраструктуры](docs/history/infrastructure.md).
+- [Планы multi-user и решения о доменах](docs/roadmap/custom-domains.md) и [история инфраструктуры](docs/history/infrastructure.md).
 
 Для изменений только документации и проектной памяти — `make check-docs`; для остальных — `make check-fast`, для UI дополнительно `make check` с Playwright. При смешанных изменениях проверяется и документация; точные границы — в [правилах разработки](docs/development.md). Команды production, DNS и TLS требуют отдельного разрешения. Проектная память агентов — `.llm-wiki/`, правила — `AGENTS.md`.

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"static-host/internal/domainname"
 )
 
 func matches(host string, origin *url.URL) bool {
@@ -35,19 +37,17 @@ func New(panelOrigin, mcpOrigin, uploadOrigin, siteSuffix string, panel, mcp, up
 	u, _ := url.Parse(uploadOrigin)
 	suffix := siteSuffix
 	local := strings.Contains(siteSuffix, ":")
+	localPort := ""
 	if local {
-		suffix, _, _ = net.SplitHostPort(siteSuffix)
+		suffix, localPort, _ = net.SplitHostPort(siteSuffix)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := r.Host
-		if strings.ContainsAny(host, "/@, \t\r\n") {
-			http.Error(w, "Forbidden", 403)
+		hostName, port, validHost := requestHost(r.Host)
+		if !validHost {
+			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
-		if h, _, err := net.SplitHostPort(host); err == nil {
-			host = h
-		}
-		name := strings.ToLower(host)
+		name := strings.ToLower(hostName)
 		tail := "." + strings.ToLower(suffix)
 		if strings.HasSuffix(name, tail) {
 			label := strings.TrimSuffix(name, tail)
@@ -71,8 +71,18 @@ func New(panelOrigin, mcpOrigin, uploadOrigin, siteSuffix string, panel, mcp, up
 					return
 				}
 			}
+			if valid && portAllowed(port, local, localPort) {
+				http.NotFound(w, r)
+			} else {
+				http.Error(w, "Forbidden", http.StatusForbidden)
+			}
+			return
 		}
-		if r.URL.Path == "/healthz" {
+
+		mp := matches(r.Host, m)
+		pp := matches(r.Host, p)
+		up := matches(r.Host, u)
+		if r.URL.Path == "/healthz" && (mp || pp || up) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			if r.Method == "GET" {
 				_, _ = w.Write([]byte("ok\n"))
@@ -82,9 +92,6 @@ func New(panelOrigin, mcpOrigin, uploadOrigin, siteSuffix string, panel, mcp, up
 			}
 			return
 		}
-		mp := matches(r.Host, m)
-		pp := matches(r.Host, p)
-		up := matches(r.Host, u)
 		if up && strings.HasPrefix(r.URL.Path, "/uploads/") {
 			upload.ServeHTTP(w, r)
 			return
@@ -101,6 +108,48 @@ func New(panelOrigin, mcpOrigin, uploadOrigin, siteSuffix string, panel, mcp, up
 			http.NotFound(w, r)
 			return
 		}
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		if !portAllowed(port, local, localPort) || !validDNSHostname(hostName) {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		sites.ServeHTTP(w, r)
 	})
+}
+
+func requestHost(raw string) (name, port string, ok bool) {
+	if raw == "" || strings.ContainsAny(raw, "/@, \t\r\n") {
+		return "", "", false
+	}
+	name = raw
+	if strings.HasPrefix(raw, "[") || strings.Contains(raw, ":") {
+		var err error
+		name, port, err = net.SplitHostPort(raw)
+		if err != nil || name == "" || !validPort(port) {
+			return "", "", false
+		}
+	}
+	return name, port, true
+}
+
+func validPort(port string) bool {
+	if len(port) == 0 || len(port) > 5 {
+		return false
+	}
+	n := 0
+	for _, c := range port {
+		if c < '0' || c > '9' {
+			return false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n > 0 && n <= 65535
+}
+
+func portAllowed(port string, local bool, localPort string) bool {
+	return port == "" || port == "443" || local && port == localPort
+}
+
+func validDNSHostname(host string) bool {
+	_, err := domainname.Normalize(host)
+	return err == nil
 }

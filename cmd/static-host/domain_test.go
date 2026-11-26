@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -24,7 +25,13 @@ func TestDomainMode(t *testing.T) {
 	}
 	env := []string{}
 	for _, v := range os.Environ() {
-		if !strings.HasPrefix(v, "STATIC_HOST_LISTEN=") && !strings.HasPrefix(v, "STATIC_HOST_DATA_DIR=") && !strings.HasPrefix(v, "STATIC_HOST_BASE_DOMAIN=") && !strings.HasPrefix(v, "STATIC_HOST_ADMIN_PASSWORD=") {
+		if !strings.HasPrefix(v, "STATIC_HOST_LISTEN=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_DATA_DIR=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_BASE_DOMAIN=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_ADMIN_PASSWORD=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_INGRESS_IPS=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_RESERVED_HOSTS=") &&
+			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_ASK_LISTEN=") {
 			env = append(env, v)
 		}
 	}
@@ -35,23 +42,38 @@ func TestDomainMode(t *testing.T) {
 	}
 	addr := ln.Addr().String()
 	ln.Close()
+	askLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	askAddr := askLn.Addr().String()
+	askLn.Close()
 	cmd := exec.Command(bin)
-	cmd.Env = append(env, "STATIC_HOST_LISTEN="+addr, "STATIC_HOST_BASE_DOMAIN=example.test")
+	cmd.Env = append(env, "STATIC_HOST_LISTEN="+addr, "STATIC_HOST_BASE_DOMAIN=example.test", "STATIC_HOST_DOMAIN_INGRESS_IPS=1.1.1.1", "STATIC_HOST_DOMAIN_ASK_LISTEN="+askAddr)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	defer func() {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		}
+	}()
 	client := &http.Client{Timeout: time.Second}
 	url := "http://" + addr
 	ready := false
 	for i := 0; i < 100; i++ {
-		resp, e := client.Get(url + "/healthz")
+		req, e := http.NewRequest(http.MethodGet, url+"/healthz", nil)
 		if e == nil {
-			resp.Body.Close()
-			ready = true
-			break
+			req.Host = "panel.example.test"
+			resp, e := client.Do(req)
+			if e == nil {
+				resp.Body.Close()
+				ready = true
+				break
+			}
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -91,6 +113,18 @@ func TestDomainMode(t *testing.T) {
 		}
 		return resp.StatusCode, b, resp
 	}
+	askResponse, err := client.Get("http://" + askAddr + "/ask?domain=unknown.example.org")
+	if err != nil {
+		t.Fatal(err)
+	}
+	askResponse.Body.Close()
+	if askResponse.StatusCode != http.StatusForbidden {
+		t.Fatalf("ask listener returned %d for an unclaimed domain", askResponse.StatusCode)
+	}
+	publicStatus, publicBody, _ := request("unknown.example.org", http.MethodGet, "/ask?domain=unknown.example.org", "", "", "", nil, "")
+	if publicStatus != http.StatusNotFound {
+		t.Fatalf("public ask route returned %d %s", publicStatus, publicBody)
+	}
 	status, body, resp := request("panel.example.test", "POST", "/api/login", "https://panel.example.test", `{"login":"admin","password":"long-password-one"}`, "", nil, "")
 	if status != 200 {
 		t.Fatalf("login %d %s", status, body)
@@ -128,6 +162,29 @@ func TestDomainMode(t *testing.T) {
 		status, _, _ = request(x.host, "GET", x.path, "", "", "", nil, "")
 		if status != 404 {
 			t.Fatal(fmt.Sprintf("%s %s: %d", x.host, x.path, status))
+		}
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	stopped := make(chan error, 1)
+	go func() { stopped <- cmd.Wait() }()
+	select {
+	case err := <-stopped:
+		if err != nil {
+			t.Fatalf("server shutdown: %v", err)
+		}
+	case <-time.After(6 * time.Second):
+		_ = cmd.Process.Kill()
+		<-stopped
+		t.Fatal("server did not stop")
+	}
+	cmd.Process = nil
+	for _, endpoint := range []string{url + "/healthz", "http://" + askAddr + "/ask?domain=unknown.example.org"} {
+		resp, err := client.Get(endpoint)
+		if err == nil {
+			resp.Body.Close()
+			t.Fatalf("listener remained available after shutdown: %s", endpoint)
 		}
 	}
 }

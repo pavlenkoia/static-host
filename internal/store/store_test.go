@@ -27,10 +27,15 @@ func TestOpenAndReopen(t *testing.T) {
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("database permissions: %v %v", info, err)
 	}
-	if _, err := db.Exec(`PRAGMA user_version=6`); err != nil {
+	if _, err := db.Exec(`PRAGMA user_version=7`); err != nil {
 		t.Fatal(err)
 	}
 	db.Close()
+	db, err = sql.Open("sqlite", filepath.Join(dir, "static-host.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
 	if newer, err := Open(dir); err == nil {
 		newer.Close()
 		t.Fatal("accepted newer schema")
@@ -59,7 +64,7 @@ PRAGMA user_version=1;`)
 	}
 	defer db.Close()
 	var version, count int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
 		t.Fatal(version, err)
 	}
 	if err = db.QueryRow("SELECT count(*) FROM agent_keys WHERE token_ciphertext IS NULL AND ((id='active' AND token_hash=x'02' AND expires_at=20 AND revoked_at IS NULL) OR (id='revoked' AND token_hash=x'03' AND expires_at=30 AND revoked_at=5))").Scan(&count); err != nil || count != 2 {
@@ -77,6 +82,86 @@ PRAGMA user_version=1;`)
 	if _, err = db.Exec("SELECT password_hash FROM users"); err == nil {
 		t.Fatal("legacy password hash column remains")
 	}
+}
+
+func TestMigrationV5PreservesDataAndReopensV6(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "static-host.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
+CREATE TABLE sites(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0, current_dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER, slug TEXT);
+CREATE UNIQUE INDEX sites_slug ON sites(slug);
+INSERT INTO users VALUES(1,'admin','hash');
+INSERT INTO sites(id,owner_id,name,created_at,updated_at) VALUES('site',1,'kept',10,20);
+PRAGMA user_version=5;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var version, count int
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
+		t.Fatalf("schema version %d: %v", version, err)
+	}
+	if err = db.QueryRow("SELECT count(*) FROM sites WHERE id='site' AND name='kept' AND created_at=10").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("v5 site not preserved: count %d: %v", count, err)
+	}
+	if err = db.QueryRow("SELECT count(*) FROM domains").Scan(&count); err != nil || count != 0 {
+		t.Fatalf("new domains table count %d: %v", count, err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(dir)
+	if err != nil {
+		t.Fatalf("reopening v6 database: %v", err)
+	}
+	defer db.Close()
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
+		t.Fatalf("reopened schema version %d: %v", version, err)
+	}
+}
+
+func TestMigrationV5RollsBackOnFailure(t *testing.T) {
+	dir := t.TempDir()
+	db, err := sql.Open("sqlite", filepath.Join(dir, "static-host.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
+CREATE TABLE sites(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0, current_dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER, slug TEXT);
+CREATE UNIQUE INDEX sites_slug ON sites(slug);
+CREATE TABLE domains(existing INTEGER);
+PRAGMA user_version=5;`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = sql.Open("sqlite", filepath.Join(dir, "static-host.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = initialize(db); err == nil {
+		t.Fatal("expected migration failure")
+	}
+	var version int
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+		t.Fatalf("failed migration changed schema version to %d: %v", version, err)
+	}
+	var columns int
+	if err = db.QueryRow("SELECT count(*) FROM pragma_table_info('domains')").Scan(&columns); err != nil || columns != 1 {
+		t.Fatalf("partial domains migration left %d columns: %v", columns, err)
+	}
+	db.Close()
 }
 
 func TestMigrationV2PreservesEncryptedKeys(t *testing.T) {
@@ -142,7 +227,7 @@ PRAGMA user_version=3;`)
 	}
 	defer db.Close()
 	var version, count int
-	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 5 {
+	if err = db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 6 {
 		t.Fatal(version, err)
 	}
 	if err = db.QueryRow("SELECT count(*) FROM agent_keys WHERE id='key' AND token_hash=x'0102' AND token_ciphertext=x'0304'").Scan(&count); err != nil || count != 1 {

@@ -12,27 +12,29 @@ import UiDialog from './components/ui/UiDialog.vue'
 import UiNotice from './components/ui/UiNotice.vue'
 import UiEmptyState from './components/ui/UiEmptyState.vue'
 import UiSkeleton from './components/ui/UiSkeleton.vue'
+import SiteDomainsDialog from './components/SiteDomainsDialog.vue'
 const router=useRouter()
 const user=ref(''),csrf=ref(''),login=ref(''),password=ref(''),sessionError=ref(''),loginError=ref(''),listError=ref(''),dialogError=ref(''),notice=ref('')
 const sessionLoading=ref(true),listLoading=ref(false),loginBusy=ref(false),logoutBusy=ref(false),createBusy=ref(false),createOpen=ref(false),confirmBusy=ref(false)
 const keys=ref<AgentKey[]>([]),revealed=ref<Record<string,string>>({}),busy=ref<Record<string,boolean>>({}),confirmation=ref<{key:AgentKey;action:'revoke'|'delete'}|null>(null)
-const sites=ref<Site[]>([]),siteError=ref(''),siteLoading=ref(false),siteDialogError=ref(''),siteDeleting=ref(false),siteConfirmation=ref<Site|null>(null)
+const sites=ref<Site[]>([]),siteError=ref(''),siteLoading=ref(false),siteDialogError=ref(''),siteDeleting=ref(false),siteConfirmation=ref<Site|null>(null),domainSite=ref<Site|null>(null)
 let generation=0,sessionGeneration=0
 function clearSecrets(){generation++;revealed.value={}}
-function clearSession(){sessionGeneration++;clearSecrets();user.value='';csrf.value='';keys.value=[];sites.value=[];siteConfirmation.value=null;siteError.value='';siteDialogError.value='';createOpen.value=false;confirmation.value=null}
+function clearSession(){sessionGeneration++;clearSecrets();user.value='';csrf.value='';keys.value=[];sites.value=[];siteConfirmation.value=null;siteError.value='';siteDialogError.value='';createOpen.value=false;confirmation.value=null;domainSite.value=null}
 function visibility(){if(document.hidden)clearSecrets()}
 watch(()=>router.currentRoute.value.path,clearSecrets)
 onMounted(()=>{document.addEventListener('visibilitychange',visibility);refresh()})
 onBeforeUnmount(()=>{document.removeEventListener('visibilitychange',visibility);clearSecrets()})
+class ApiError extends Error { code:string|null; constructor(message:string,code:string|null){super(message);this.name='ApiError';this.code=code} }
 async function api(path:string,method='GET',body?:unknown){
  const headers:Record<string,string>={};if(body!==undefined)headers['Content-Type']='application/json';if(method!=='GET'&&csrf.value)headers['X-CSRF-Token']=csrf.value
  const response=await fetch(path,{method,headers,credentials:'same-origin',...(body!==undefined?{body:JSON.stringify(body)}:{})})
- if(!response.ok){if(response.status===401&&path!=='/api/login'){clearSession();await router.replace('/login')}throw new Error(response.status===401&&path==='/api/login'?'Неверный логин или пароль':`Ошибка сервиса (${response.status})`)}
+ if(!response.ok){if(response.status===401&&path!=='/api/login'){clearSession();await router.replace('/login')}let payload:any=null;try{payload=await response.json()}catch{};const codes=['invalid_domain','invalid_request','site_not_found','domain_not_found','domain_conflict','reserved_domain','domains_disabled'];const code=typeof payload?.code==='string'?payload.code:codes.includes(payload?.error)?payload.error:null;throw new ApiError(response.status===401&&path==='/api/login'?'Неверный логин или пароль':`Ошибка сервиса (${response.status})`,code)}
  return response.status===204?null:response.json()
 }
 const message=(e:unknown)=>e instanceof Error?e.message:'Ошибка сервиса'
 async function loadKeys(){listLoading.value=true;listError.value='';try{keys.value=(await api('/api/keys')).keys}catch(e){if(user.value)listError.value=message(e)}finally{listLoading.value=false}}
-async function loadSites(){const current=sessionGeneration;siteLoading.value=true;siteError.value='';try{const result=await api('/api/sites');if(current===sessionGeneration&&user.value)sites.value=result.sites}catch(e){if(current===sessionGeneration&&user.value)siteError.value=message(e)}finally{if(current===sessionGeneration)siteLoading.value=false}}
+async function loadSites(){const current=sessionGeneration;siteLoading.value=true;siteError.value='';try{const result=await api('/api/sites');if(current===sessionGeneration&&user.value){sites.value=result.sites;if(domainSite.value&&!result.sites.some((s:Site)=>s.id===domainSite.value?.id))domainSite.value=null}}catch(e){if(current===sessionGeneration&&user.value)siteError.value=message(e)}finally{if(current===sessionGeneration)siteLoading.value=false}}
 async function refresh(){sessionLoading.value=true;sessionError.value='';try{const s=await api('/api/session');user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){if(!message(e).includes('(401)'))sessionError.value=message(e)}finally{sessionLoading.value=false}}
 async function signIn(){loginBusy.value=true;loginError.value='';try{const s=await api('/api/login','POST',{login:login.value,password:password.value});user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){loginError.value=message(e)}finally{password.value='';loginBusy.value=false}}
 async function signOut(){logoutBusy.value=true;try{await api('/api/logout','POST');clearSession();await router.replace('/login')}catch(e){listError.value=message(e)}finally{logoutBusy.value=false}}
@@ -44,7 +46,8 @@ async function copy(id:string){if(!revealed.value[id])return reveal(id,false);tr
 function confirmAction(key:AgentKey,action:'revoke'|'delete'){dialogError.value='';confirmation.value={key,action}}
 async function perform(){const c=confirmation.value;if(!c)return;confirmBusy.value=true;busy.value[c.key.id]=true;dialogError.value='';try{const path=`/api/keys/${encodeURIComponent(c.key.id)}`;await api(c.action==='revoke'?path+'/revoke':path,c.action==='revoke'?'POST':'DELETE');if(c.action==='delete'){keys.value=keys.value.filter(k=>k.id!==c.key.id);hide(c.key.id)}else{const k=keys.value.find(k=>k.id===c.key.id);if(k){k.status='revoked';k.revoked_at=Math.floor(Date.now()/1000)}}confirmation.value=null;notice.value=c.action==='delete'?'Ключ удалён':'Ключ отозван'}catch(e){dialogError.value=message(e)}finally{delete busy.value[c.key.id];confirmBusy.value=false}}
 function confirmSite(site:Site){siteDialogError.value='';siteConfirmation.value=site}
-async function deleteSite(){const site=siteConfirmation.value;if(!site)return;siteDeleting.value=true;siteDialogError.value='';try{await api(`/api/sites/${encodeURIComponent(site.id)}`,'DELETE');sites.value=sites.value.filter(s=>s.id!==site.id);siteConfirmation.value=null;notice.value='Сайт удалён'}catch(e){siteDialogError.value=message(e)}finally{siteDeleting.value=false}}
+async function deleteSite(){const site=siteConfirmation.value;if(!site)return;siteDeleting.value=true;siteDialogError.value='';try{await api(`/api/sites/${encodeURIComponent(site.id)}`,'DELETE');sites.value=sites.value.filter(s=>s.id!==site.id);if(domainSite.value?.id===site.id)domainSite.value=null;siteConfirmation.value=null;notice.value='Сайт удалён'}catch(e){siteDialogError.value=message(e)}finally{siteDeleting.value=false}}
+function openDomains(site:Site){domainSite.value=site}
 </script>
 <template>
  <div v-if="sessionLoading" class="grid min-h-dvh place-items-center p-6">
@@ -73,7 +76,7 @@ async function deleteSite(){const site=siteConfirmation.value;if(!site)return;si
     <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><h1 id="sites-heading" class="text-[28px] font-semibold tracking-tight">Сайты</h1><UiButton @click="loadSites">Обновить список</UiButton></div>
     <UiNotice v-if="siteError" tone="error">{{ siteError }}<template #action><UiButton @click="loadSites">Повторить</UiButton></template></UiNotice>
     <div v-if="siteLoading" aria-busy="true" class="grid gap-4 rounded-card border border-border bg-surface p-6"><span class="sr-only">Загрузка сайтов</span><UiSkeleton/><UiSkeleton shape="block"/></div>
-    <template v-else-if="!siteError || sites.length"><SiteList v-if="sites.length" :sites="sites" @delete="confirmSite"/><div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Сайтов пока нет" description="Создайте сайт через MCP."/></div></template>
+    <template v-else-if="!siteError || sites.length"><SiteList v-if="sites.length" :sites="sites" @delete="confirmSite" @domains="openDomains"/><div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Сайтов пока нет" description="Создайте сайт через MCP."/></div></template>
    </section>
    <div class="mb-8 grid gap-5 md:flex md:items-start md:justify-between md:gap-6">
     <div><h1 class="text-[28px] leading-9 font-semibold tracking-tight md:text-[32px] md:leading-10">Ключи агентов</h1><p class="mt-2 text-base leading-6 text-muted">Управляйте доступом агентов к вашему кабинету.</p></div>
@@ -94,6 +97,7 @@ async function deleteSite(){const site=siteConfirmation.value;if(!site)return;si
    <template #footer><UiButton :disabled="siteDeleting" @click="siteConfirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="siteDeleting" @click="deleteSite">Удалить</UiButton></template>
   </UiDialog>
   <KeyCreateDialog :open="createOpen" :busy="createBusy" :error="dialogError" @close="createOpen=false" @submit="create"/>
+  <SiteDomainsDialog :open="!!domainSite" :site="domainSite" :api="api" :session-generation="sessionGeneration" @close="domainSite=null"/>
   <UiDialog :open="!!confirmation" :title="confirmation?.action==='delete'?'Удалить ключ?':'Отозвать ключ?'" :description="confirmation?.action==='delete'?'Ключ будет удалён без возможности восстановления. Если он активен, агент сразу потеряет доступ.':'Доступ агента прекратится немедленно.'" :busy="confirmBusy" @close="confirmation=null">
    <p v-if="confirmation">Ключ: <strong>{{ confirmation.key.name }}</strong></p><UiNotice v-if="dialogError" tone="error">{{ dialogError }}</UiNotice>
    <template #footer><UiButton :disabled="confirmBusy" @click="confirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="confirmBusy" @click="perform">{{ confirmation?.action==='delete'?'Удалить':'Отозвать' }}</UiButton></template>

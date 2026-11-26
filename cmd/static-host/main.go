@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -37,7 +38,14 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	publications, err := publication.New(db, cfg.DataDir, publication.Options{UploadOrigin: cfg.UploadOrigin, SiteSuffix: cfg.SiteSuffix, Local: cfg.BaseDomain == ""})
+	publications, err := publication.New(db, cfg.DataDir, publication.Options{
+		UploadOrigin:        cfg.UploadOrigin,
+		SiteSuffix:          cfg.SiteSuffix,
+		Local:               cfg.BaseDomain == "",
+		BaseDomain:          cfg.BaseDomain,
+		DomainIngressIPs:    cfg.DomainIngressIPs,
+		DomainReservedHosts: cfg.DomainReservedHosts,
+	})
 	if err != nil {
 		return err
 	}
@@ -55,30 +63,60 @@ func run() error {
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
+	servers := []*http.Server{server}
+	var askListener net.Listener
+	if cfg.DomainAskListen != "" {
+		askListener, err = net.Listen("tcp", cfg.DomainAskListen)
+		if err != nil {
+			return fmt.Errorf("domain ask listener: %w", err)
+		}
+		defer askListener.Close()
+		servers = append(servers, &http.Server{
+			Addr:              cfg.DomainAskListen,
+			Handler:           publications.DomainAskHandler(),
+			ReadHeaderTimeout: 5 * time.Second,
+		})
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	errs := make(chan error, 1)
+	errs := make(chan error, len(servers))
 	go func() { errs <- server.ListenAndServe() }()
+	if askListener != nil {
+		askServer := servers[1]
+		go func() { errs <- askServer.Serve(askListener) }()
+	}
 
+	completed := 0
+	var runErr error
 	select {
 	case err := <-errs:
+		completed++
 		if !errors.Is(err, http.ErrServerClosed) {
-			return err
+			runErr = err
 		}
-		return nil
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			server.Close()
-			return fmt.Errorf("shutdown: %w", err)
-		}
-		if err := <-errs; !errors.Is(err, http.ErrServerClosed) {
-			return err
-		}
-		return nil
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, srv := range servers {
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			if runErr == nil {
+				runErr = fmt.Errorf("shutdown: %w", err)
+			}
+			_ = srv.Close()
+		}
+	}
+	for completed < len(servers) {
+		err := <-errs
+		completed++
+		if !errors.Is(err, http.ErrServerClosed) && runErr == nil {
+			runErr = err
+		}
+	}
+	return runErr
 }
 
 func main() {

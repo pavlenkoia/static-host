@@ -11,7 +11,7 @@ func TestRouting(t *testing.T) {
 	for _, x := range []struct {
 		host, path, method string
 		want               int
-	}{{"PANEL.EXAMPLE.TEST:443", "/", "GET", 201}, {"mcp.example.test", "/mcp", "POST", 202}, {"panel.example.test", "/mcp", "POST", 404}, {"mcp.example.test", "/", "GET", 404}, {"upload.example.test", "/uploads/a", "PUT", 203}, {"upload.example.test", "/api/session", "GET", 404}, {"s-0123456789abcdef0123456789abcdef.sites.example.test", "/healthz", "GET", 204}, {"s-0123456789abcdef0123456789abcdef.sites.example.test:8443", "/", "GET", 403}, {"evil.test", "/", "GET", 403}, {"evil.test", "/healthz", "HEAD", 200}, {"evil.test", "/healthz", "POST", 405}, {"mcp.example.test", "/mcp/", "GET", 404}} {
+	}{{"PANEL.EXAMPLE.TEST:443", "/", "GET", 201}, {"panel.example.test", "/healthz", "GET", 200}, {"mcp.example.test", "/mcp", "POST", 202}, {"panel.example.test", "/mcp", "POST", 404}, {"mcp.example.test", "/", "GET", 404}, {"upload.example.test", "/uploads/a", "PUT", 203}, {"upload.example.test", "/api/session", "GET", 404}, {"s-0123456789abcdef0123456789abcdef.sites.example.test", "/healthz", "GET", 204}, {"s-0123456789abcdef0123456789abcdef.sites.example.test:8443", "/", "GET", 403}, {"evil.test", "/", "GET", 204}, {"evil.test", "/healthz", "HEAD", 204}, {"evil.test", "/healthz", "POST", 204}, {"evil.test:443", "/", "GET", 204}, {"evil.test:80", "/", "GET", 403}, {"evil.test:8443", "/", "GET", 403}, {"bad..test", "/", "GET", 403}, {"mcp.example.test", "/mcp/", "GET", 404}} {
 		r := httptest.NewRequest(x.method, "http://test"+x.path, nil)
 		r.Host = x.host
 		r.Header.Set("X-Forwarded-Host", "panel.example.test")
@@ -30,7 +30,7 @@ func TestLocalLANOrigin(t *testing.T) {
 	for _, tc := range []struct {
 		host string
 		want int
-	}{{"192.0.2.10:8081", 204}, {"192.0.2.11:8081", 403}, {"192.0.2.10:8082", 403}, {"attacker.invalid:8081", 403}} {
+	}{{"192.0.2.10:8081", 204}, {"192.0.2.11:8081", 403}, {"192.0.2.10:8082", 403}, {"attacker.invalid:8081", 404}} {
 		r := httptest.NewRequest("GET", "http://internal/", nil)
 		r.Host = tc.host
 		w := httptest.NewRecorder()

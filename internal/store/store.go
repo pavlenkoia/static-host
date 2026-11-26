@@ -53,7 +53,7 @@ func initialize(db *sql.DB) error {
 	if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		return err
 	}
-	if version > 5 {
+	if version > 6 {
 		return fmt.Errorf("unsupported database schema version %d", version)
 	}
 	if version == 0 {
@@ -106,6 +106,32 @@ PRAGMA user_version=4;`)
 		_, err = tx.Exec(`ALTER TABLE sites ADD COLUMN slug TEXT;
 CREATE UNIQUE INDEX sites_slug ON sites(slug);
 PRAGMA user_version=5;`)
+		if err != nil {
+			return err
+		}
+	}
+	if version <= 5 {
+		_, err = tx.Exec(`CREATE TABLE domains (
+id TEXT PRIMARY KEY,
+site_id TEXT NOT NULL REFERENCES sites(id),
+hostname TEXT NOT NULL,
+state TEXT NOT NULL CHECK(state IN ('pending_dns','provisioning_tls','active','suspended')),
+claimed_at INTEGER,
+dns_checked_at INTEGER,
+https_checked_at INTEGER,
+next_check_at INTEGER NOT NULL,
+failure_count INTEGER NOT NULL DEFAULT 0,
+mismatch_count INTEGER NOT NULL DEFAULT 0,
+error_code TEXT,
+probe_token TEXT NOT NULL,
+revision INTEGER NOT NULL DEFAULT 0,
+created_at INTEGER NOT NULL,
+updated_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX domains_site_hostname ON domains(site_id,hostname);
+CREATE UNIQUE INDEX domains_claimed_hostname ON domains(hostname) WHERE claimed_at IS NOT NULL;
+CREATE INDEX domains_next_check_at ON domains(next_check_at);
+PRAGMA user_version=6;`)
 		if err != nil {
 			return err
 		}

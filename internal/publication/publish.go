@@ -259,6 +259,9 @@ func (s *Service) Delete(ctx context.Context, ownerID int64, siteID string) erro
 	if _, err = tx.ExecContext(ctx, "UPDATE uploads SET state='failed',error_code='site_not_found' WHERE site_id=? AND state IN ('pending','ready')", siteID); err != nil {
 		return err
 	}
+	if _, err = tx.ExecContext(ctx, "DELETE FROM domains WHERE site_id=?", siteID); err != nil {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, "DELETE FROM publish_requests WHERE site_id=?", siteID); err != nil {
 		return err
 	}

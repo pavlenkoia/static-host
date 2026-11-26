@@ -3,9 +3,11 @@ package publication
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"database/sql"
 	"encoding/hex"
 	"errors"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,9 @@ type Identity struct {
 type Options struct {
 	UploadOrigin, SiteSuffix string
 	Local                    bool
+	BaseDomain               string
+	DomainIngressIPs         []netip.Addr
+	DomainReservedHosts      []string
 }
 type UploadStatus struct {
 	ID        string  `json:"id"`
@@ -47,21 +52,44 @@ func (e *Error) Error() string  { return e.Code }
 func failure(code string) error { return &Error{Code: code} }
 
 type Service struct {
-	db         *sql.DB
-	dataDir    string
-	options    Options
-	mu         sync.Mutex
-	locksMu    sync.Mutex
-	locks      map[string]*sync.RWMutex
-	stop       chan struct{}
-	done       chan struct{}
-	failpoint  func(string)
-	spaceCheck func(int64) bool
-	now        func() time.Time
+	db              *sql.DB
+	dataDir         string
+	options         Options
+	mu              sync.Mutex
+	locksMu         sync.Mutex
+	locks           map[string]*sync.RWMutex
+	stop            chan struct{}
+	done            chan struct{}
+	domainDone      chan struct{}
+	domainWake      chan struct{}
+	failpoint       func(string)
+	spaceCheck      func(int64) bool
+	now             func() time.Time
+	domainResolver  domainResolver
+	domainProbePort int
+	domainRootCAs   *x509.CertPool
+	manualChecksMu  sync.Mutex
+	manualChecks    map[string]time.Time
 }
 
 func New(db *sql.DB, dataDir string, options Options) (*Service, error) {
-	s := &Service{db: db, dataDir: dataDir, options: options, locks: make(map[string]*sync.RWMutex), stop: make(chan struct{}), done: make(chan struct{}), now: time.Now}
+	s := &Service{
+		db:              db,
+		dataDir:         dataDir,
+		options:         options,
+		locks:           make(map[string]*sync.RWMutex),
+		stop:            make(chan struct{}),
+		done:            make(chan struct{}),
+		domainDone:      make(chan struct{}),
+		domainWake:      make(chan struct{}, 1),
+		manualChecks:    make(map[string]time.Time),
+		now:             time.Now,
+		domainResolver:  systemDomainResolver{},
+		domainProbePort: 443,
+	}
+	if err := s.configureDomainOptions(); err != nil {
+		return nil, err
+	}
 	for _, dir := range []string{"staging", "content"} {
 		if err := os.MkdirAll(filepath.Join(dataDir, "sites", dir), 0700); err != nil {
 			return nil, err
@@ -84,9 +112,20 @@ func New(db *sql.DB, dataDir string, options Options) (*Service, error) {
 		return nil, err
 	}
 	go s.janitor()
+	if s.domainsEnabled() {
+		go s.domainWorker()
+	} else {
+		close(s.domainDone)
+	}
 	return s, nil
 }
-func (s *Service) Close() error { close(s.stop); <-s.done; return nil }
+func (s *Service) Close() error {
+	close(s.stop)
+	<-s.done
+	<-s.domainDone
+	return nil
+}
+
 func randomID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

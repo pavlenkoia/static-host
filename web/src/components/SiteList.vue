@@ -3,7 +3,7 @@ import type { Site } from './types'
 import UiBadge from './ui/UiBadge.vue'
 import UiButton from './ui/UiButton.vue'
 defineProps<{sites:Site[]}>()
-const emit=defineEmits<{delete:[site:Site]}>()
+const emit=defineEmits<{delete:[site:Site];domains:[site:Site]}>()
 const states:Record<string,string>={pending:'Ожидает загрузки',receiving:'Загружается',ready:'Готов к публикации',failed:'Ошибка загрузки',expired:'Срок загрузки истёк'}
 const errors:Record<string,string>={invalid_archive:'Некорректный архив',archive_too_large:'Архив слишком большой',upload_expired:'Срок загрузки истёк',upload_interrupted:'Загрузка прервана',site_not_found:'Сайт удалён'}
 </script>
@@ -17,7 +17,10 @@ const errors:Record<string,string>={invalid_archive:'Некорректный а
     <div><UiBadge :tone="site.status==='published'?'success':'neutral'">{{ site.status==='published'?'Опубликован':'Не опубликован' }}</UiBadge> <span class="text-muted">Поколение {{ site.generation }} · {{ site.size_bytes }} байт · файлов: {{ site.file_count }}</span></div>
     <p v-if="site.upload" class="text-sm text-muted">{{ states[site.upload.state] || site.upload.state }}<span v-if="site.upload.error_code">: {{ errors[site.upload.error_code] || 'Не удалось подготовить загрузку' }}</span></p>
    </div>
-   <UiButton variant="ghost" :aria-label="`Удалить сайт ${site.name}`" @click="emit('delete',site)">Удалить</UiButton>
+   <div class="flex flex-wrap items-start gap-2">
+    <UiButton variant="ghost" :aria-label="`Домены сайта ${site.name}`" @click="emit('domains',site)">Домены</UiButton>
+    <UiButton variant="ghost" :aria-label="`Удалить сайт ${site.name}`" @click="emit('delete',site)">Удалить</UiButton>
+   </div>
   </div>
  </div>
 </template>

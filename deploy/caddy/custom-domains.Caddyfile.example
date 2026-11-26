@@ -1,0 +1,7 @@
+# Merge this global option into the operator-managed Uncloud Caddy configuration.
+# Replace the address with the app's trusted, internal network address.
+{
+    on_demand_tls {
+        ask http://<internal-app-address>:8082/ask
+    }
+}

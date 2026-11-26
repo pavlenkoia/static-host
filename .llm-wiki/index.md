@@ -14,7 +14,7 @@ Sections:
 - [Entities](/entities/index.md)
 - [Concepts](/concepts/index.md)
 
-Проектная память static-host. Вход в документацию для людей — `docs/README.md`, текущая архитектура — `docs/architecture.md`. Планы отделены в `docs/roadmap/`, исторические проверки — в `docs/history/`. Кабинет владельца, MCP и публикация статических сайтов реализованы; публичный wildcard ingress системных сайтов проверен ранее. Собственные домены остаются планом.
+Проектная память static-host. Вход в документацию для людей — `docs/README.md`, текущая архитектура — `docs/architecture.md`. Планы отделены в `docs/roadmap/`, исторические проверки — в `docs/history/`. Кабинет владельца, MCP, публикация статических сайтов и привязка собственных доменов реализованы; production-развёртывание доменов требует отдельного разрешения.
 
 Начните с [начальных решений](/sources/project-decisions.md) и [исправленного подключения OKF](/sources/agent-workflow-correction.md), затем выберите тему в секционных индексах выше. Raw-снимки неизменяемы. Локальный bundle — стандартная `.llm-wiki/`; используйте штатные команды `okf ingest`, `okf update`, `okf search` и `okf wire --agent codex`.
 

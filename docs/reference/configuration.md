@@ -12,9 +12,14 @@
 | `--data-dir` | `STATIC_HOST_DATA_DIR` | `./data` | Непустой каталог постоянных данных |
 | `--base-domain` | `STATIC_HOST_BASE_DOMAIN` | пусто | Базовый публичный домен |
 | `--local-origin` | `STATIC_HOST_LOCAL_ORIGIN` | вычисляется из listener | Явный HTTP origin локального режима |
+| `--domain-ingress-ips` | `STATIC_HOST_DOMAIN_INGRESS_IPS` | пусто | Разделённые запятыми адреса ingress для проверки DNS |
+| `--domain-reserved-hosts` | `STATIC_HOST_DOMAIN_RESERVED_HOSTS` | пусто | Зарезервированные hostname и их поддомены |
+| `--domain-ask-listen` | `STATIC_HOST_DOMAIN_ASK_LISTEN` | пусто | Внутренний listener разрешений TLS, числовой IP и порт |
 | нет | `STATIC_HOST_ADMIN_PASSWORD` | нет, обязателен | Пароль `admin`, 12–72 байта |
 
 Базовый домен — ASCII hostname минимум из двух labels, не IP. Он приводится к нижнему регистру. Секреты не передавайте флагами и не коммитьте.
+
+Собственные домены отключены без ingress IP и ask listener. Эти параметры задаются вместе; недопустимая конфигурация прерывает запуск. В публичном режиме адреса ingress должны быть глобальными unicast, в локальном допускаются приватные и loopback. Базовый домен и его поддомены всегда зарезервированы; домены других сервисов необходимо явно перечислить в reserved hosts.
 
 ## Локальный режим
 

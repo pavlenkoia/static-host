@@ -20,8 +20,14 @@ Go SDK v1.8.0: при протоколе по умолчанию `2026-07-28` `C
 | `sites_delete` | `site_id` | `deleted`, `site_id`; удаление без восстановления |
 | `uploads_create` | `site_id`, `format` (`zip` или `tar.gz`), `expected_generation` | Upload grant |
 | `sites_publish` | `site_id`, `upload_id`, `expected_generation`, `idempotency_key` | `site` после публикации |
+| `domains_list` | `site_id` | `domains` сайта |
+| `domains_add` | `site_id`, `hostname` | `domain`, новая или существующая заявка |
+| `domains_check` | `site_id`, `domain_id` | `domain`, текущий статус после постановки проверки |
+| `domains_delete` | `site_id`, `domain_id` | `deleted`, `site_id`, `domain_id` |
 
 `expected_generation` обязателен в обоих вызовах. Используйте значение из актуального объекта сайта. `idempotency_key` — 1–128 ASCII-символов из букв, цифр и `._:-`, уникальный для новой операции владельца.
+
+Проверка домена выполняется асинхронно: `pending_dns`, `provisioning_tls`, `active` или `suspended`; DNS/TLS ошибки находятся в `domain.error_code`. Записи DNS предлагаются в `dns_records`. Заявка не доказывает владение доменом: TXT не проверяется. Собственный и системный адреса обслуживают одно содержимое без перенаправления между hostname.
 
 ## Полный цикл
 
