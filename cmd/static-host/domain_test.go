@@ -30,8 +30,7 @@ func TestDomainMode(t *testing.T) {
 			!strings.HasPrefix(v, "STATIC_HOST_BASE_DOMAIN=") &&
 			!strings.HasPrefix(v, "STATIC_HOST_ADMIN_PASSWORD=") &&
 			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_INGRESS_IPS=") &&
-			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_RESERVED_HOSTS=") &&
-			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_ASK_LISTEN=") {
+			!strings.HasPrefix(v, "STATIC_HOST_DOMAIN_RESERVED_HOSTS=") {
 			env = append(env, v)
 		}
 	}
@@ -42,14 +41,9 @@ func TestDomainMode(t *testing.T) {
 	}
 	addr := ln.Addr().String()
 	ln.Close()
-	askLn, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	askAddr := askLn.Addr().String()
-	askLn.Close()
+	askAddr := "127.0.0.1:8082"
 	cmd := exec.Command(bin)
-	cmd.Env = append(env, "STATIC_HOST_LISTEN="+addr, "STATIC_HOST_BASE_DOMAIN=example.test", "STATIC_HOST_DOMAIN_INGRESS_IPS=1.1.1.1", "STATIC_HOST_DOMAIN_ASK_LISTEN="+askAddr)
+	cmd.Env = append(env, "STATIC_HOST_LISTEN="+addr, "STATIC_HOST_BASE_DOMAIN=example.test", "STATIC_HOST_DOMAIN_INGRESS_IPS=1.1.1.1")
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err = cmd.Start(); err != nil {

@@ -65,14 +65,18 @@ func run() error {
 	}
 	servers := []*http.Server{server}
 	var askListener net.Listener
-	if cfg.DomainAskListen != "" {
-		askListener, err = net.Listen("tcp", cfg.DomainAskListen)
+	if len(cfg.DomainIngressIPs) > 0 {
+		askAddress := "0.0.0.0:8082"
+		if cfg.BaseDomain == "" {
+			askAddress = "127.0.0.1:8082"
+		}
+		askListener, err = net.Listen("tcp", askAddress)
 		if err != nil {
 			return fmt.Errorf("domain ask listener: %w", err)
 		}
 		defer askListener.Close()
 		servers = append(servers, &http.Server{
-			Addr:              cfg.DomainAskListen,
+			Addr:              askAddress,
 			Handler:           publications.DomainAskHandler(),
 			ReadHeaderTimeout: 5 * time.Second,
 		})

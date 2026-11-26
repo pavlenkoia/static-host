@@ -17,7 +17,6 @@ type Config struct {
 	Listen, DataDir, BaseDomain, PanelOrigin, MCPOrigin, UploadOrigin, SiteSuffix, AdminPassword string
 	DomainIngressIPs                                                                             []netip.Addr
 	DomainReservedHosts                                                                          []string
-	DomainAskListen                                                                              string
 }
 
 func value(env func(string) (string, bool), key, fallback string) string {
@@ -36,7 +35,6 @@ func Parse(args []string, env func(string) (string, bool)) (Config, error) {
 	f.StringVar(&localOrigin, "local-origin", value(env, "STATIC_HOST_LOCAL_ORIGIN", ""), "explicit HTTP origin for local mode")
 	f.StringVar(&ingressIPs, "domain-ingress-ips", value(env, "STATIC_HOST_DOMAIN_INGRESS_IPS", ""), "comma-separated custom-domain ingress IPs")
 	f.StringVar(&reservedHosts, "domain-reserved-hosts", value(env, "STATIC_HOST_DOMAIN_RESERVED_HOSTS", ""), "comma-separated reserved hostnames")
-	f.StringVar(&c.DomainAskListen, "domain-ask-listen", value(env, "STATIC_HOST_DOMAIN_ASK_LISTEN", ""), "numeric IP and port for the internal domain ask listener")
 	if err := f.Parse(args); err != nil {
 		return c, err
 	}
@@ -171,35 +169,6 @@ func parseDomainSettings(c *Config, ingressList, reservedList string, localMode 
 			}
 			c.DomainReservedHosts = append(c.DomainReservedHosts, hostname)
 		}
-	}
-	if len(c.DomainIngressIPs) == 0 {
-		if c.DomainAskListen != "" {
-			return errors.New("STATIC_HOST_DOMAIN_ASK_LISTEN requires domain ingress IPs")
-		}
-		return nil
-	}
-	if c.DomainAskListen == "" {
-		return errors.New("domain ingress IPs require STATIC_HOST_DOMAIN_ASK_LISTEN")
-	}
-	askHost, askPort, err := net.SplitHostPort(c.DomainAskListen)
-	if err != nil || askPort == "" {
-		return errors.New("invalid domain ask listen address")
-	}
-	askIP, err := netip.ParseAddr(askHost)
-	if err != nil {
-		return errors.New("invalid domain ask listen address")
-	}
-	if askIP.Zone() != "" {
-		return errors.New("invalid domain ask listen address")
-	}
-	for _, ch := range askPort {
-		if ch < '0' || ch > '9' {
-			return errors.New("invalid domain ask listen address")
-		}
-	}
-	n, err := strconv.Atoi(askPort)
-	if err != nil || n < 1 || n > 65535 {
-		return errors.New("invalid domain ask listen address")
 	}
 	return nil
 }

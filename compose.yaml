@@ -4,6 +4,8 @@ services:
     environment:
       STATIC_HOST_BASE_DOMAIN: ${STATIC_HOST_BASE_DOMAIN:?Set STATIC_HOST_BASE_DOMAIN in .env}
       STATIC_HOST_ADMIN_PASSWORD: ${STATIC_HOST_ADMIN_PASSWORD:?Set STATIC_HOST_ADMIN_PASSWORD in .env}
+      STATIC_HOST_DOMAIN_INGRESS_IPS: ${STATIC_HOST_DOMAIN_INGRESS_IPS:?Set STATIC_HOST_DOMAIN_INGRESS_IPS in .env}
+      STATIC_HOST_DOMAIN_RESERVED_HOSTS: ${STATIC_HOST_DOMAIN_RESERVED_HOSTS:-}
     x-machines:
       - ${STATIC_HOST_MACHINE}
     x-caddy: |
@@ -15,6 +17,15 @@ services:
           dns cloudflare {env.CLOUDFLARE_API_TOKEN}
         }
         reverse_proxy {{upstreams 8081}}
+      }
+      https:// {
+        tls {
+          on_demand
+        }
+        reverse_proxy {{upstreams 8081}}
+      }
+      :80 {
+        redir https://{host}{uri} 308
       }
     volumes:
       - /var/lib/static-host:/data

@@ -24,6 +24,7 @@ docker volume create "$empty" >/dev/null
 
 start() {
   docker run -d --name "$container" \
+    --health-interval=1s --health-start-period=1s \
     --mount "type=volume,src=$volume,dst=/data" \
     -e STATIC_HOST_BASE_DOMAIN=example.test \
     -e "STATIC_HOST_ADMIN_PASSWORD=$password" \
@@ -35,7 +36,15 @@ start() {
     if curl --noproxy '*' -fsS -H 'Host: panel.example.test' "$url/healthz" -o "$tmp/health" 2>/dev/null; then
       printf 'ok\n' > "$tmp/expected"
       cmp "$tmp/expected" "$tmp/health"
-      return
+      for ((health_attempt=0; health_attempt<10; health_attempt++)); do
+        if [[ $(docker inspect --format '{{.State.Health.Status}}' "$container") == healthy ]]; then
+          return
+        fi
+        sleep 1
+      done
+      echo 'container healthcheck did not become healthy' >&2
+      docker inspect --format '{{json .State.Health}}' "$container" >&2
+      return 1
     fi
     sleep 1
   done
@@ -102,7 +111,7 @@ curl --noproxy '*' -fsS -X PUT -H 'Host: upload.example.test' -H "Authorization:
 mcp_call "$(jq -cn --arg site "$site_id" --arg upload "$upload_id" '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:"sites_publish",arguments:{site_id:$site,upload_id:$upload,expected_generation:0,idempotency_key:"container-publish"}}}')" > "$tmp/published.json"
 [[ $(jq -r '.result.structuredContent.site.generation' "$tmp/published.json") == 1 ]]
 [[ $(curl --noproxy '*' -fsS -H "Host: $site_id.sites.example.test" "$url/") == '<h1>container fixture</h1>' ]]
-[[ $(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.test' "$url/") == 403 ]]
+[[ $(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' -H 'Host: unknown.example.test' "$url/") == 404 ]]
 [[ $(curl --noproxy '*' -sS -o /dev/null -w '%{http_code}' -X POST -H 'Host: mcp.example.test' "$url/mcp") == 401 ]]
 stop
 

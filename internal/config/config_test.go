@@ -69,7 +69,6 @@ func TestDomainSettings(t *testing.T) {
 			"STATIC_HOST_BASE_DOMAIN":           "example.test",
 			"STATIC_HOST_DOMAIN_INGRESS_IPS":    "1.1.1.1, 2606:4700:4700::1111",
 			"STATIC_HOST_DOMAIN_RESERVED_HOSTS": " EXAMPLE.org.,bücher.example ",
-			"STATIC_HOST_DOMAIN_ASK_LISTEN":     "127.0.0.1:8082",
 		}
 		v, ok := values[k]
 		return v, ok
@@ -81,14 +80,13 @@ func TestDomainSettings(t *testing.T) {
 	if len(c.DomainIngressIPs) != 2 || c.DomainIngressIPs[0].String() != "1.1.1.1" ||
 		c.DomainIngressIPs[1].String() != "2606:4700:4700::1111" ||
 		c.DomainReservedHosts[0] != "example.org" ||
-		c.DomainReservedHosts[1] != "xn--bcher-kva.example" ||
-		c.DomainAskListen != "127.0.0.1:8082" {
+		c.DomainReservedHosts[1] != "xn--bcher-kva.example" {
 		t.Fatalf("unexpected domain settings: %+v", c)
 	}
 
 	c, err = Parse([]string{
 		"--base-domain=", "--domain-ingress-ips=127.0.0.1,10.0.0.2",
-		"--domain-reserved-hosts=Example.org.", "--domain-ask-listen=[::1]:8082",
+		"--domain-reserved-hosts=Example.org.",
 	}, func(k string) (string, bool) {
 		if k == "STATIC_HOST_ADMIN_PASSWORD" {
 			return "valid-admin-password", true
@@ -102,11 +100,9 @@ func TestDomainSettings(t *testing.T) {
 
 func TestInvalidDomainSettings(t *testing.T) {
 	for _, settings := range []map[string]string{
-		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "10.0.0.1", "STATIC_HOST_DOMAIN_ASK_LISTEN": "127.0.0.1:8082"},
+		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "10.0.0.1"},
 		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "127.0.0.1"},
-		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "1.1.1.1"},
-		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "1.1.1.1", "STATIC_HOST_DOMAIN_ASK_LISTEN": "ask:8082"},
-		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "1.1.1.1", "STATIC_HOST_DOMAIN_ASK_LISTEN": "127.0.0.1:0"},
+		{"STATIC_HOST_DOMAIN_INGRESS_IPS": "not-an-ip"},
 		{"STATIC_HOST_DOMAIN_RESERVED_HOSTS": "https://example.org"},
 		{"STATIC_HOST_DOMAIN_RESERVED_HOSTS": "example.org,,other.org"},
 	} {

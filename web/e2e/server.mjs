@@ -31,13 +31,10 @@ function run(command, args, options) {
 export async function startTestServer() {
   const directory = await mkdtemp(join(tmpdir(), 'static-host-e2e-'))
   const port = await freePort()
-  let askPort = await freePort()
-  while (askPort === port) askPort = await freePort()
   const binary = join(directory, process.platform === 'win32' ? 'static-host.exe' : 'static-host')
   const env = { ...process.env, STATIC_HOST_ADMIN_PASSWORD: 'e2e-test-password' }
-  for (const key of ['STATIC_HOST_LISTEN', 'STATIC_HOST_DATA_DIR', 'STATIC_HOST_BASE_DOMAIN', 'STATIC_HOST_DOMAIN_INGRESS_IPS', 'STATIC_HOST_DOMAIN_RESERVED_HOSTS', 'STATIC_HOST_DOMAIN_ASK_LISTEN']) delete env[key]
+  for (const key of ['STATIC_HOST_LISTEN', 'STATIC_HOST_DATA_DIR', 'STATIC_HOST_BASE_DOMAIN', 'STATIC_HOST_DOMAIN_INGRESS_IPS', 'STATIC_HOST_DOMAIN_RESERVED_HOSTS']) delete env[key]
   env.STATIC_HOST_DOMAIN_INGRESS_IPS='127.0.0.1'
-  env.STATIC_HOST_DOMAIN_ASK_LISTEN=`127.0.0.1:${askPort}`
   let child
   try {
     await run('go', ['build', '-o', binary, './cmd/static-host'], { cwd: root })
