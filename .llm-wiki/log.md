@@ -1,5 +1,9 @@
 # Log
 
+- 2026-11-26T11:18:46Z — update: notes/domains-and-security.md
+
+- 2026-11-26T11:17:09Z — update: notes/domains-and-security.md
+
 - 2026-11-26T06:56:58Z — update: sources/docs-only-gate.md
 
 - 2026-11-26T06:56:58Z — update: sources/go-formatting.md

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted,onBeforeUnmount,ref,watch } from 'vue'
 import { useRouter } from 'vue-router'
-import type { AgentKey, Site } from './components/types'
+import type { AgentKey, Domain, Site } from './components/types'
 import KeyList from './components/KeyList.vue'
 import SiteList from './components/SiteList.vue'
 import KeyCreateDialog from './components/KeyCreateDialog.vue'
@@ -18,9 +18,28 @@ const user=ref(''),csrf=ref(''),login=ref(''),password=ref(''),sessionError=ref(
 const sessionLoading=ref(true),listLoading=ref(false),loginBusy=ref(false),logoutBusy=ref(false),createBusy=ref(false),createOpen=ref(false),confirmBusy=ref(false)
 const keys=ref<AgentKey[]>([]),revealed=ref<Record<string,string>>({}),busy=ref<Record<string,boolean>>({}),confirmation=ref<{key:AgentKey;action:'revoke'|'delete'}|null>(null)
 const sites=ref<Site[]>([]),siteError=ref(''),siteLoading=ref(false),siteDialogError=ref(''),siteDeleting=ref(false),siteConfirmation=ref<Site|null>(null),domainSite=ref<Site|null>(null)
+const siteDomains = ref<Record<string, Domain[]>>({})
+const domainErrors = ref<Record<string, string>>({})
+async function loadSiteDomains(site: Site, current = sessionGeneration) {
+  try {
+    const result = await api(`/api/sites/${encodeURIComponent(site.id)}/domains`)
+    if (current !== sessionGeneration || !user.value) return
+    siteDomains.value[site.id] = result.domains ?? []
+    delete domainErrors.value[site.id]
+  } catch (cause) {
+    if (current !== sessionGeneration || !user.value) return
+    if (cause instanceof ApiError && cause.code === 'domains_disabled') return
+    domainErrors.value[site.id] = 'Не удалось загрузить домены. Нажмите «Обновить список».'
+  }
+}
+function closeDomains() {
+  const site = domainSite.value
+  domainSite.value = null
+  if (site) void loadSiteDomains(site)
+}
 let generation=0,sessionGeneration=0
 function clearSecrets(){generation++;revealed.value={}}
-function clearSession(){sessionGeneration++;clearSecrets();user.value='';csrf.value='';keys.value=[];sites.value=[];siteConfirmation.value=null;siteError.value='';siteDialogError.value='';createOpen.value=false;confirmation.value=null;domainSite.value=null}
+function clearSession(){sessionGeneration++;clearSecrets();user.value='';csrf.value='';keys.value=[];sites.value=[];siteDomains.value={};domainErrors.value={};siteConfirmation.value=null;siteError.value='';siteDialogError.value='';createOpen.value=false;confirmation.value=null;domainSite.value=null}
 function visibility(){if(document.hidden)clearSecrets()}
 watch(()=>router.currentRoute.value.path,clearSecrets)
 onMounted(()=>{document.addEventListener('visibilitychange',visibility);refresh()})
@@ -34,7 +53,7 @@ async function api(path:string,method='GET',body?:unknown){
 }
 const message=(e:unknown)=>e instanceof Error?e.message:'Ошибка сервиса'
 async function loadKeys(){listLoading.value=true;listError.value='';try{keys.value=(await api('/api/keys')).keys}catch(e){if(user.value)listError.value=message(e)}finally{listLoading.value=false}}
-async function loadSites(){const current=sessionGeneration;siteLoading.value=true;siteError.value='';try{const result=await api('/api/sites');if(current===sessionGeneration&&user.value){sites.value=result.sites;if(domainSite.value&&!result.sites.some((s:Site)=>s.id===domainSite.value?.id))domainSite.value=null}}catch(e){if(current===sessionGeneration&&user.value)siteError.value=message(e)}finally{if(current===sessionGeneration)siteLoading.value=false}}
+async function loadSites(){const current=sessionGeneration;siteLoading.value=true;siteError.value='';try{const result=await api('/api/sites');if(current===sessionGeneration&&user.value){sites.value=result.sites;if(domainSite.value&&!result.sites.some((s:Site)=>s.id===domainSite.value?.id))domainSite.value=null;await Promise.all(sites.value.map(site=>loadSiteDomains(site,current)))}}catch(e){if(current===sessionGeneration&&user.value)siteError.value=message(e)}finally{if(current===sessionGeneration)siteLoading.value=false}}
 async function refresh(){sessionLoading.value=true;sessionError.value='';try{const s=await api('/api/session');user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){if(!message(e).includes('(401)'))sessionError.value=message(e)}finally{sessionLoading.value=false}}
 async function signIn(){loginBusy.value=true;loginError.value='';try{const s=await api('/api/login','POST',{login:login.value,password:password.value});user.value=s.login;csrf.value=s.csrf_token;await router.replace('/');await Promise.all([loadKeys(),loadSites()])}catch(e){loginError.value=message(e)}finally{password.value='';loginBusy.value=false}}
 async function signOut(){logoutBusy.value=true;try{await api('/api/logout','POST');clearSession();await router.replace('/login')}catch(e){listError.value=message(e)}finally{logoutBusy.value=false}}
@@ -76,7 +95,7 @@ function openDomains(site:Site){domainSite.value=site}
     <div class="mb-6 flex flex-wrap items-center justify-between gap-4"><h1 id="sites-heading" class="text-[28px] font-semibold tracking-tight">Сайты</h1><UiButton @click="loadSites">Обновить список</UiButton></div>
     <UiNotice v-if="siteError" tone="error">{{ siteError }}<template #action><UiButton @click="loadSites">Повторить</UiButton></template></UiNotice>
     <div v-if="siteLoading" aria-busy="true" class="grid gap-4 rounded-card border border-border bg-surface p-6"><span class="sr-only">Загрузка сайтов</span><UiSkeleton/><UiSkeleton shape="block"/></div>
-    <template v-else-if="!siteError || sites.length"><SiteList v-if="sites.length" :sites="sites" @delete="confirmSite" @domains="openDomains"/><div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Сайтов пока нет" description="Создайте сайт через MCP."/></div></template>
+    <template v-else-if="!siteError || sites.length"><SiteList v-if="sites.length" :sites="sites" :site-domains="siteDomains" :domain-errors="domainErrors" @delete="confirmSite" @domains="openDomains"/><div v-else class="rounded-card border border-border bg-surface shadow-card"><UiEmptyState title="Сайтов пока нет" description="Создайте сайт через MCP."/></div></template>
    </section>
    <div class="mb-8 grid gap-5 md:flex md:items-start md:justify-between md:gap-6">
     <div><h1 class="text-[28px] leading-9 font-semibold tracking-tight md:text-[32px] md:leading-10">Ключи агентов</h1><p class="mt-2 text-base leading-6 text-muted">Управляйте доступом агентов к вашему кабинету.</p></div>
@@ -97,7 +116,7 @@ function openDomains(site:Site){domainSite.value=site}
    <template #footer><UiButton :disabled="siteDeleting" @click="siteConfirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="siteDeleting" @click="deleteSite">Удалить</UiButton></template>
   </UiDialog>
   <KeyCreateDialog :open="createOpen" :busy="createBusy" :error="dialogError" @close="createOpen=false" @submit="create"/>
-  <SiteDomainsDialog :open="!!domainSite" :site="domainSite" :api="api" :session-generation="sessionGeneration" @close="domainSite=null"/>
+  <SiteDomainsDialog :open="!!domainSite" :site="domainSite" :api="api" :session-generation="sessionGeneration" @close="closeDomains"/>
   <UiDialog :open="!!confirmation" :title="confirmation?.action==='delete'?'Удалить ключ?':'Отозвать ключ?'" :description="confirmation?.action==='delete'?'Ключ будет удалён без возможности восстановления. Если он активен, агент сразу потеряет доступ.':'Доступ агента прекратится немедленно.'" :busy="confirmBusy" @close="confirmation=null">
    <p v-if="confirmation">Ключ: <strong>{{ confirmation.key.name }}</strong></p><UiNotice v-if="dialogError" tone="error">{{ dialogError }}</UiNotice>
    <template #footer><UiButton :disabled="confirmBusy" @click="confirmation=null">Отмена</UiButton><UiButton variant="danger" :loading="confirmBusy" @click="perform">{{ confirmation?.action==='delete'?'Удалить':'Отозвать' }}</UiButton></template>

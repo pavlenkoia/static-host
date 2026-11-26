@@ -30,10 +30,10 @@ const disabled = ref(false)
 const sortedDomains = computed(() => domains.value)
 
 const states: Record<string, string> = {
-  pending_dns: 'Ожидает настройки DNS',
-  provisioning_tls: 'Настраивается HTTPS',
-  active: 'Активен',
-  suspended: 'Приостановлен',
+  pending_dns: 'Нужна настройка домена',
+  provisioning_tls: 'Подключаем защищённое соединение',
+  active: 'Подключён',
+  suspended: 'Домен не работает',
 }
 const errors: Record<string, string> = {
   invalid_domain: 'Некорректное доменное имя',
@@ -53,6 +53,7 @@ let timer: ReturnType<typeof setInterval> | undefined
 let requestGeneration = 0
 let requestBusy = false
 let domainRevision = 0
+let loaded = false
 
 function message(cause: unknown): string {
   const value = cause as ApiError
@@ -148,12 +149,13 @@ async function load(
   if (!props.open || !siteID || requestBusy) return
 
   requestBusy = true
-  loading.value = true
+  if (generation === requestGeneration && !loaded) loading.value = true
   const revision = domainRevision
   try {
     const result = await props.api(`/api/sites/${encodeURIComponent(siteID)}/domains`) as DomainListResponse
     if (isCurrent(generation, siteID, session) && revision === domainRevision) {
       domains.value = result.domains ?? []
+      loaded = true
     }
   } catch (cause) {
     if (isCurrent(generation, siteID, session)) {
@@ -172,6 +174,7 @@ function start(): void {
   hostname.value = ''
   error.value = ''
   disabled.value = false
+  loaded = false
   if (!props.open || !props.site) return
 
   const generation = requestGeneration
@@ -278,16 +281,11 @@ function date(value: number | null): string {
     </UiNotice>
     <template v-else>
       <UiNotice v-if="error" tone="error" role="alert">{{ error }}</UiNotice>
-      <div class="grid gap-2 text-sm text-muted">
-        <p>
-          Проверяется только настройка DNS. Отдельной проверки владения через TXT-запись нет:
-          совпадение IP-адресов не доказывает владение доменом.
-        </p>
-        <p>
-          Для домена верхнего уровня (apex) DNS-провайдер может не поддерживать CNAME.
-          Настройте записи, поддерживаемые вашим провайдером.
-        </p>
-      </div>
+      <p class="text-sm text-muted">
+        Собственный домен — необязательно. Сайт уже доступен по своему текущему адресу.
+        Чтобы подключить другой адрес, введите домен, которым вы управляете.
+        После добавления покажем, что изменить в его настройках.
+      </p>
       <form class="grid gap-3" @submit.prevent="add">
         <UiField v-slot="field" id="custom-domain" label="Домен">
           <UiInput
@@ -326,31 +324,59 @@ function date(value: number | null): string {
           </div>
           <span class="text-sm">{{ states[domain.state] || domain.state }}</span>
         </div>
+        <p v-if="domain.state === 'active'" class="text-sm text-success">
+          Домен подключён, защищённое соединение HTTPS работает. Больше ничего настраивать не нужно.
+        </p>
+        <p v-else-if="domain.state === 'provisioning_tls'" class="text-sm text-muted">
+          Домен уже указывает на сайт. Настраиваем защищённое соединение HTTPS — дождитесь завершения.
+          Статус обновится автоматически.
+        </p>
+        <p v-else-if="domain.state === 'suspended'" class="text-sm text-muted">
+          Не удалось подтвердить, что домен по-прежнему ведёт на этот сайт и доступен по HTTPS.
+          Проверьте настройки ниже. Повторим проверку автоматически.
+        </p>
         <a
           v-if="domain.state === 'active'"
           :href="domain.url"
           target="_blank"
           rel="noopener noreferrer"
           class="text-accent"
-        >{{ domain.url }}</a>
+        >Открыть сайт ↗ — {{ domain.url }}</a>
         <p v-if="domain.error_code" class="text-sm text-danger">
           {{ errors[domain.error_code] || `Ошибка проверки: ${domain.error_code}` }}
         </p>
-        <div class="grid gap-1 text-xs text-muted">
-          <span>DNS-проверка: {{ date(domain.dns_checked_at) }} · HTTPS-проверка: {{ date(domain.https_checked_at) }}</span>
-          <span>Следующая проверка: {{ date(domain.next_check_at) }}</span>
-        </div>
-        <div v-if="domain.dns_records.length" class="grid gap-2">
-          <strong class="text-sm">Настройки DNS</strong>
-          <div
-            v-for="(record, index) in domain.dns_records"
-            :key="`${record.type}-${record.name}-${index}`"
-            class="grid gap-1 border-l-2 border-border pl-3 text-sm"
-          >
-            <span>{{ record.type }} · {{ record.name }}</span>
-            <code class="[overflow-wrap:anywhere]">{{ record.value }}</code>
+        <details :open="domain.state === 'pending_dns' || domain.state === 'suspended'" class="text-sm">
+          <summary class="cursor-pointer font-semibold">{{ domain.state === 'active' ? 'Посмотреть настройки домена' : 'Как настроить домен' }}</summary>
+          <div class="mt-3 grid gap-3">
+            <p>Откройте управление доменом у регистратора или в сервисе, где настроены его DNS-записи.</p>
+            <template v-if="domain.dns_records.some(record => record.type === 'CNAME')">
+              <p>Выберите один способ: CNAME или IP-адреса. Не добавляйте CNAME и A/AAAA для одного имени одновременно.</p>
+              <p>Рекомендуем CNAME: это запись, которая направляет ваш домен на адрес сайта.</p>
+              <div v-for="record in domain.dns_records.filter(record => record.type === 'CNAME')" :key="`${record.type}-${record.name}`" class="grid gap-1 border-l-2 border-border pl-3">
+                <span>Тип: <strong>{{ record.type }}</strong></span>
+                <span>Имя: <code>{{ record.name }}</code></span>
+                <span>Значение: <code>{{ record.value }}</code></span>
+              </div>
+            </template>
+            <template v-if="domain.dns_records.some(record => record.type !== 'CNAME')">
+              <p>{{ domain.dns_records.some(record => record.type === 'CNAME') ? 'Если сервис не разрешает CNAME (например, для адреса example.com без www), используйте вместо него эти IP-записи:' : 'Добавьте следующие IP-записи:' }}</p>
+              <div v-for="record in domain.dns_records.filter(record => record.type !== 'CNAME')" :key="`${record.type}-${record.name}-${record.value}`" class="grid gap-1 border-l-2 border-border pl-3">
+                <span>Тип: <strong>{{ record.type }}</strong></span>
+                <span>Имя: <code>{{ record.name }}</code></span>
+                <span>Значение: <code>{{ record.value }}</code></span>
+              </div>
+            </template>
+            <p>Поле «Имя» может называться «Хост». Если сервис сам дописывает ваш основной домен, укажите только часть перед ним; для самого основного домена обычно используют @.</p>
+            <p>Сохраните изменения и нажмите «Проверить снова». Изменения могут появиться не сразу; мы также проверяем их автоматически.</p>
           </div>
-        </div>
+        </details>
+        <details class="text-xs text-muted">
+          <summary class="cursor-pointer">Подробности проверки</summary>
+          <div class="mt-2 grid gap-1">
+            <span>DNS-проверка: {{ date(domain.dns_checked_at) }} · HTTPS-проверка: {{ date(domain.https_checked_at) }}</span>
+            <span>Следующая проверка: {{ date(domain.next_check_at) }}</span>
+          </div>
+        </details>
         <div class="flex flex-wrap gap-2">
           <UiButton :disabled="!!busy[domain.id]" @click="check(domain)">
             {{ busy[domain.id] ? 'Проверка…' : 'Проверить снова' }}
@@ -360,6 +386,9 @@ function date(value: number | null): string {
           </UiButton>
         </div>
       </article>
+    </template>
+    <template #footer>
+      <UiButton @click="emit('close')">Закрыть</UiButton>
     </template>
   </UiDialog>
 </template>
