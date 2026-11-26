@@ -25,5 +25,6 @@ timestamp: 2026-11-25T07:22:07Z
 - [Публичный wildcard ingress системных сайтов](/sources/wildcard-ingress.md)
 - [Ручной выпуск контейнера](/sources/manual-image-release.md)
 - [Структура документации static-host](/sources/documentation-structure.md)
+- [Форматирование Go и gate](/sources/go-formatting.md)
 
 <!-- /okf:auto-index -->

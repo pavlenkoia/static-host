@@ -1,52 +1,82 @@
 package store
 
 import (
- "context"
- "database/sql"
- "fmt"
- "os"
- "path/filepath"
+	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
 
- _ "modernc.org/sqlite"
+	_ "modernc.org/sqlite"
 )
 
 func Open(dir string) (*sql.DB, error) {
- if err := os.MkdirAll(dir, 0700); err != nil { return nil, fmt.Errorf("data directory: %w", err) }
- path := filepath.Join(dir, "static-host.db")
- f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
- if err != nil { return nil, fmt.Errorf("database file: %w", err) }
- if err = f.Close(); err != nil { return nil, err }
- db, err := sql.Open("sqlite", path)
- if err != nil { return nil, err }
- db.SetMaxOpenConns(1)
- if err = initialize(db); err != nil { db.Close(); return nil, fmt.Errorf("initialize database: %w", err) }
- return db, nil
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, fmt.Errorf("data directory: %w", err)
+	}
+	path := filepath.Join(dir, "static-host.db")
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return nil, fmt.Errorf("database file: %w", err)
+	}
+	if err = f.Close(); err != nil {
+		return nil, err
+	}
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	if err = initialize(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("initialize database: %w", err)
+	}
+	return db, nil
 }
 
 func initialize(db *sql.DB) error {
- for _, q := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=DELETE"} { if _, err := db.Exec(q); err != nil { return err } }
- if _, err := db.Exec("PRAGMA foreign_keys=OFF"); err != nil { return err }
- tx, err := db.BeginTx(context.Background(), nil); if err != nil { _, _ = db.Exec("PRAGMA foreign_keys=ON"); return err }; defer tx.Rollback()
- var version int
- if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil { return err }
- if version > 5 { return fmt.Errorf("unsupported database schema version %d", version) }
- if version == 0 {
-  _, err = tx.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
+	for _, q := range []string{"PRAGMA busy_timeout=5000", "PRAGMA journal_mode=DELETE"} {
+		if _, err := db.Exec(q); err != nil {
+			return err
+		}
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys=OFF"); err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(context.Background(), nil)
+	if err != nil {
+		_, _ = db.Exec("PRAGMA foreign_keys=ON")
+		return err
+	}
+	defer tx.Rollback()
+	var version int
+	if err = tx.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version > 5 {
+		return fmt.Errorf("unsupported database schema version %d", version)
+	}
+	if version == 0 {
+		_, err = tx.Exec(`CREATE TABLE users(id INTEGER PRIMARY KEY CHECK(id=1), login TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
 CREATE TABLE agent_keys(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, revoked_at INTEGER);
 CREATE TABLE sessions(token_hash BLOB PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), csrf_token TEXT NOT NULL, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
 PRAGMA user_version=1;`)
-  if err != nil { return err }
- }
- if version <= 1 {
-  _, err = tx.Exec(`CREATE TABLE agent_keys_v2(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER, token_ciphertext BLOB);
+		if err != nil {
+			return err
+		}
+	}
+	if version <= 1 {
+		_, err = tx.Exec(`CREATE TABLE agent_keys_v2(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER, token_ciphertext BLOB);
 INSERT INTO agent_keys_v2(id,owner_id,name,token_hash,created_at,expires_at,revoked_at) SELECT id,owner_id,name,token_hash,created_at,expires_at,revoked_at FROM agent_keys;
 DROP TABLE agent_keys;
 ALTER TABLE agent_keys_v2 RENAME TO agent_keys;
 PRAGMA user_version=2;`)
-  if err != nil { return err }
- }
- if version <= 2 {
-  _, err = tx.Exec(`CREATE TABLE users_v3(id INTEGER PRIMARY KEY CHECK(id=1));
+		if err != nil {
+			return err
+		}
+	}
+	if version <= 2 {
+		_, err = tx.Exec(`CREATE TABLE users_v3(id INTEGER PRIMARY KEY CHECK(id=1));
 INSERT INTO users_v3(id) VALUES(1);
 CREATE TABLE agent_keys_v3(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users_v3(id), name TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE, created_at INTEGER NOT NULL, expires_at INTEGER, revoked_at INTEGER, token_ciphertext BLOB);
 INSERT INTO agent_keys_v3 SELECT id,owner_id,name,token_hash,created_at,expires_at,revoked_at,token_ciphertext FROM agent_keys;
@@ -59,22 +89,30 @@ ALTER TABLE users_v3 RENAME TO users;
 ALTER TABLE agent_keys_v3 RENAME TO agent_keys;
 ALTER TABLE sessions_v3 RENAME TO sessions;
 PRAGMA user_version=3;`)
-  if err != nil { return err }
- }
- if version <= 3 {
-  _, err = tx.Exec(`CREATE TABLE sites(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0, current_dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER);
+		if err != nil {
+			return err
+		}
+	}
+	if version <= 3 {
+		_, err = tx.Exec(`CREATE TABLE sites(id TEXT PRIMARY KEY, owner_id INTEGER NOT NULL REFERENCES users(id), name TEXT NOT NULL, generation INTEGER NOT NULL DEFAULT 0, current_dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, deleted_at INTEGER);
 CREATE TABLE uploads(id TEXT PRIMARY KEY, site_id TEXT NOT NULL REFERENCES sites(id), owner_id INTEGER NOT NULL REFERENCES users(id), key_id TEXT NOT NULL, format TEXT NOT NULL, expected_generation INTEGER NOT NULL, token_hash BLOB NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending','receiving','ready','failed','expired','published')), expires_at INTEGER NOT NULL, dir TEXT, size_bytes INTEGER NOT NULL DEFAULT 0, file_count INTEGER NOT NULL DEFAULT 0, error_code TEXT);
 CREATE TABLE publish_requests(owner_id INTEGER NOT NULL REFERENCES users(id), idempotency_key TEXT NOT NULL, site_id TEXT NOT NULL REFERENCES sites(id), upload_id TEXT NOT NULL, expected_generation INTEGER NOT NULL, result_json TEXT NOT NULL, PRIMARY KEY(owner_id,idempotency_key));
 PRAGMA user_version=4;`)
-  if err != nil { return err }
- }
- if version <= 4 {
-  _, err = tx.Exec(`ALTER TABLE sites ADD COLUMN slug TEXT;
+		if err != nil {
+			return err
+		}
+	}
+	if version <= 4 {
+		_, err = tx.Exec(`ALTER TABLE sites ADD COLUMN slug TEXT;
 CREATE UNIQUE INDEX sites_slug ON sites(slug);
 PRAGMA user_version=5;`)
-  if err != nil { return err }
- }
- if err = tx.Commit(); err != nil { return err }
- _, err = db.Exec("PRAGMA foreign_keys=ON")
- return err
+		if err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	_, err = db.Exec("PRAGMA foreign_keys=ON")
+	return err
 }

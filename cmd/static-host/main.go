@@ -22,18 +22,30 @@ import (
 func run() error {
 	args := os.Args[1:]
 	cfg, err := config.Parse(args, os.LookupEnv)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	db, err := store.Open(cfg.DataDir)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	defer db.Close()
-	if _, err := db.Exec("DELETE FROM sessions"); err != nil { return err }
+	if _, err := db.Exec("DELETE FROM sessions"); err != nil {
+		return err
+	}
 	keyCipher, err := auth.LoadKeyCipher(cfg.DataDir, db)
-	if err != nil { return err }
-	publications, err := publication.New(db, cfg.DataDir, publication.Options{UploadOrigin:cfg.UploadOrigin, SiteSuffix:cfg.SiteSuffix, Local:cfg.BaseDomain==""})
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
+	publications, err := publication.New(db, cfg.DataDir, publication.Options{UploadOrigin: cfg.UploadOrigin, SiteSuffix: cfg.SiteSuffix, Local: cfg.BaseDomain == ""})
+	if err != nil {
+		return err
+	}
 	defer publications.Close()
 	app, err := web.New(db, keyCipher, cfg.PanelOrigin, cfg.AdminPassword, publications)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	upload := publications.UploadHandler()
 	handler := httpserver.New(cfg.PanelOrigin, cfg.MCPOrigin, cfg.UploadOrigin, cfg.SiteSuffix, app, mcpserver.New(db, cfg.MCPOrigin, publications), upload, publications.SiteHandler())
 
@@ -68,7 +80,6 @@ func run() error {
 		return nil
 	}
 }
-
 
 func main() {
 	if err := run(); err != nil {

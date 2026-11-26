@@ -1,5 +1,11 @@
 # Log
 
+- 2026-11-26T06:56:58Z — update: sources/docs-only-gate.md
+
+- 2026-11-26T06:56:58Z — update: sources/go-formatting.md
+
+- 2026-11-26T06:56:37Z — ingest: go-formatting (raw/static-host-go-formatting.md)
+
 - 2026-11-26T06:48:01Z — update: notes/infrastructure-and-workflow.md
 
 - 2026-11-26T06:48:01Z — update: sources/docs-only-gate.md
